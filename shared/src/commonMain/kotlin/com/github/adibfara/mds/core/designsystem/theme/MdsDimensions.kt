@@ -44,4 +44,8 @@ data class MdsSizes(
     val splitterWidth: Dp = 6.dp,
     val borderWidth: Dp = 1.dp,
     val indentStep: Dp = 14.dp,
+    val touchTarget: Dp = 48.dp,
+    val bottomBarHeight: Dp = 56.dp,
+    val mobileTopBarHeight: Dp = 56.dp,
+    val editorBottomPadding: Dp = 160.dp,
 )

@@ -37,8 +37,16 @@ import com.github.adibfara.mds.feature.editor.EditorUiState
 import com.github.adibfara.mds.feature.editor.ui.EditorPane
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerUiState
+import com.github.adibfara.mds.feature.explorer.ui.ExplorerDialogHost
 import com.github.adibfara.mds.feature.tabs.TabsEvent
 import com.github.adibfara.mds.feature.tabs.TabsUiState
+import com.github.adibfara.mds.feature.tabs.ui.TabsGridScreen
+
+private sealed interface MobileScreen {
+    data object FileBrowser : MobileScreen
+    data object Note : MobileScreen
+    data object TabsGrid : MobileScreen
+}
 
 @Composable
 fun MobileShell(
@@ -46,6 +54,7 @@ fun MobileShell(
     explorerState: ExplorerUiState,
     tabsState: TabsUiState,
     editorState: EditorUiState,
+    isDarkTheme: Boolean,
     onExplorerEvent: (ExplorerEvent) -> Unit,
     onTabsEvent: (TabsEvent) -> Unit,
     onEditorEvent: (EditorEvent) -> Unit,
@@ -55,53 +64,128 @@ fun MobileShell(
     modifier: Modifier = Modifier,
 ) {
     var browsePath by remember { mutableStateOf(FilePath.Root) }
-    val showEditor = tabsState.activeTab != null
+    var screen: MobileScreen by remember {
+        mutableStateOf(if (tabsState.activeTab != null) MobileScreen.Note else MobileScreen.FileBrowser)
+    }
+    var previousScreen: MobileScreen by remember { mutableStateOf(MobileScreen.FileBrowser) }
+    var drawerOpen by remember { mutableStateOf(false) }
 
-    PlatformBackHandler(enabled = showEditor || !browsePath.isRoot) {
-        if (showEditor) {
-            onTabsEvent(TabsEvent.CloseActive)
-        } else {
-            browsePath = browsePath.parent ?: FilePath.Root
+    fun openFile(node: FileNode) {
+        onExplorerEvent(ExplorerEvent.Activate(node))
+        screen = MobileScreen.Note
+        drawerOpen = false
+    }
+
+    fun openTabsGrid() {
+        previousScreen = screen
+        screen = MobileScreen.TabsGrid
+    }
+
+    val backHandlerEnabled = drawerOpen || screen != MobileScreen.FileBrowser || !browsePath.isRoot
+    PlatformBackHandler(enabled = backHandlerEnabled) {
+        when {
+            drawerOpen -> drawerOpen = false
+            screen == MobileScreen.TabsGrid -> screen = previousScreen
+            screen == MobileScreen.Note -> screen = MobileScreen.FileBrowser
+            else -> browsePath = browsePath.parent ?: FilePath.Root
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().safeContentPadding()) {
-        if (showEditor) {
-            MobileTopBar(
-                title = editorState.path?.nameWithoutExtension.orEmpty(),
-                canGoBack = true,
-                onBack = { onTabsEvent(TabsEvent.CloseActive) },
-                onToggleTheme = onToggleTheme,
-            )
-            MdsDivider()
-            EditorPane(
-                state = editorState,
-                onEvent = onEditorEvent,
-                onOpenInDefaultApplication = onOpenInDefaultApplication,
-                onRevealInFileManager = onOpenInDefaultApplication,
-                onOpenLink = onOpenLink,
-                showStatusBar = appState.settings.showStatusBar,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            MobileTopBar(
-                title = if (browsePath.isRoot) explorerState.spaceName else browsePath.name,
-                canGoBack = !browsePath.isRoot,
-                onBack = { browsePath = browsePath.parent ?: FilePath.Root },
-                onToggleTheme = onToggleTheme,
-            )
-            MdsDivider()
-            FolderList(
-                nodes = explorerState.rows
-                    .map { it.node }
-                    .filter { it.path.parent?.value == browsePath.value },
-                onOpenFolder = { node ->
-                    onExplorerEvent(ExplorerEvent.ToggleFolder(node.path))
-                    browsePath = node.path
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().safeContentPadding()) {
+            when (screen) {
+                MobileScreen.Note -> {
+                    MobileTopBar(
+                        title = editorState.path?.nameWithoutExtension.orEmpty(),
+                        canGoBack = true,
+                        isDarkTheme = isDarkTheme,
+                        onBack = { screen = MobileScreen.FileBrowser },
+                        onMenu = null,
+                        onToggleTheme = onToggleTheme,
+                    )
+                    MdsDivider()
+                    EditorPane(
+                        state = editorState,
+                        onEvent = onEditorEvent,
+                        onOpenInDefaultApplication = onOpenInDefaultApplication,
+                        onRevealInFileManager = onOpenInDefaultApplication,
+                        onOpenLink = onOpenLink,
+                        showStatusBar = appState.settings.showStatusBar,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                MobileScreen.FileBrowser -> {
+                    MobileTopBar(
+                        title = if (browsePath.isRoot) explorerState.spaceName else browsePath.name,
+                        canGoBack = !browsePath.isRoot,
+                        isDarkTheme = isDarkTheme,
+                        onBack = { browsePath = browsePath.parent ?: FilePath.Root },
+                        onMenu = { drawerOpen = true },
+                        onToggleTheme = onToggleTheme,
+                    )
+                    MdsDivider()
+                    FolderList(
+                        nodes = explorerState.rows
+                            .map { it.node }
+                            .filter { it.path.parent?.value == browsePath.value },
+                        onOpenFolder = { node ->
+                            onExplorerEvent(ExplorerEvent.ToggleFolder(node.path))
+                            browsePath = node.path
+                        },
+                        onOpenFile = { node -> openFile(node) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                MobileScreen.TabsGrid -> {
+                    MobileTopBar(
+                        title = "Tabs",
+                        canGoBack = true,
+                        isDarkTheme = isDarkTheme,
+                        onBack = { screen = previousScreen },
+                        onMenu = null,
+                        onToggleTheme = onToggleTheme,
+                    )
+                    MdsDivider()
+                    TabsGridScreen(
+                        tabs = tabsState.tabs,
+                        activeTabId = tabsState.activeTabId,
+                        onActivate = { id ->
+                            onTabsEvent(TabsEvent.Activate(id))
+                            screen = MobileScreen.Note
+                        },
+                        onClose = { id -> onTabsEvent(TabsEvent.Close(id)) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (screen != MobileScreen.TabsGrid) {
+                MdsDivider()
+                MobileBottomBar(
+                    tabCount = tabsState.tabs.size,
+                    onAdd = {
+                        val parent = browsePath.takeUnless { it.isRoot }
+                        onExplorerEvent(ExplorerEvent.RequestNewNote(parent))
+                    },
+                    onTabs = { openTabsGrid() },
+                )
+            }
+        }
+
+        if (drawerOpen) {
+            MobileDrawerOverlay(
+                explorerState = explorerState,
+                onExplorerEvent = { event ->
+                    if (event is ExplorerEvent.Activate) openFile(event.node) else onExplorerEvent(event)
                 },
-                onOpenFile = { node -> onExplorerEvent(ExplorerEvent.Activate(node)) },
-                modifier = Modifier.weight(1f),
+                onDismiss = { drawerOpen = false },
             )
+        }
+
+        explorerState.dialog?.let { dialog ->
+            ExplorerDialogHost(dialog = dialog, onEvent = onExplorerEvent, onChooseFolder = {})
         }
     }
 }
@@ -110,13 +194,15 @@ fun MobileShell(
 private fun MobileTopBar(
     title: String,
     canGoBack: Boolean,
+    isDarkTheme: Boolean,
     onBack: () -> Unit,
+    onMenu: (() -> Unit)?,
     onToggleTheme: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(MdsTheme.sizes.mobileTopBarHeight)
             .background(MdsTheme.colors.sidebar)
             .padding(horizontal = MdsTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -128,6 +214,12 @@ private fun MobileTopBar(
                 contentDescription = "Back",
                 onClick = onBack,
             )
+        } else if (onMenu != null) {
+            MdsIconButton(
+                icon = MdsIcons.Menu,
+                contentDescription = "Open menu",
+                onClick = onMenu,
+            )
         }
         MdsText(
             text = title,
@@ -137,7 +229,7 @@ private fun MobileTopBar(
             maxLines = 1,
         )
         MdsIconButton(
-            icon = MdsIcons.Moon,
+            icon = if (isDarkTheme) MdsIcons.Sun else MdsIcons.Moon,
             contentDescription = "Toggle theme",
             onClick = onToggleTheme,
         )

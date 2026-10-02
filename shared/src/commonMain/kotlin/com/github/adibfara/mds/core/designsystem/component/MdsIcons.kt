@@ -344,4 +344,65 @@ object MdsIcons {
         lineTo(18.5f, 20f)
         lineTo(18.5f, 9.5f)
     }
+
+    val Menu: ImageVector = strokeIcon("Menu") {
+        segment(4f, 6.5f, 20f, 6.5f)
+        segment(4f, 12f, 20f, 12f)
+        segment(4f, 17.5f, 20f, 17.5f)
+    }
+
+    val Layers: ImageVector = strokeIcon("Layers") {
+        moveTo(12f, 3.5f)
+        lineTo(20.5f, 8f)
+        lineTo(12f, 12.5f)
+        lineTo(3.5f, 8f)
+        close()
+        moveTo(3.5f, 12.5f)
+        lineTo(12f, 17f)
+        lineTo(20.5f, 12.5f)
+        moveTo(3.5f, 17f)
+        lineTo(12f, 21.5f)
+        lineTo(20.5f, 17f)
+    }
+
+    val Heart: ImageVector = strokeIcon("Heart") {
+        moveTo(12f, 20f)
+        lineTo(4.5f, 12.6f)
+        curveTo(2.6f, 10.7f, 2.6f, 7.6f, 4.5f, 5.8f)
+        curveTo(6.3f, 4f, 9.2f, 4f, 11f, 5.8f)
+        lineTo(12f, 6.8f)
+        lineTo(13f, 5.8f)
+        curveTo(14.8f, 4f, 17.7f, 4f, 19.5f, 5.8f)
+        curveTo(21.4f, 7.6f, 21.4f, 10.7f, 19.5f, 12.6f)
+        close()
+    }
+
+    val Columns: ImageVector = strokeIcon("Columns") {
+        moveTo(4f, 4f)
+        lineTo(20f, 4f)
+        lineTo(20f, 20f)
+        lineTo(4f, 20f)
+        close()
+        segment(12f, 4f, 12f, 20f)
+    }
+
+    val Target: ImageVector = strokeIcon("Target") {
+        circle(12f, 12f, 8.5f)
+        circle(12f, 12f, 4f)
+        dot(12f, 12f)
+    }
+
+    val ListOrdered: ImageVector = strokeIcon("ListOrdered") {
+        segment(10f, 6f, 20f, 6f)
+        segment(10f, 12f, 20f, 12f)
+        segment(10f, 18f, 20f, 18f)
+        moveTo(4.5f, 4.5f)
+        lineTo(4.5f, 7.5f)
+        moveTo(4f, 4.5f)
+        lineTo(5f, 4.5f)
+        moveTo(4f, 10.5f)
+        lineTo(5.3f, 10.5f)
+        curveTo(5.3f, 10.5f, 4.2f, 11.6f, 4f, 12f)
+        lineTo(5.3f, 12f)
+    }
 }

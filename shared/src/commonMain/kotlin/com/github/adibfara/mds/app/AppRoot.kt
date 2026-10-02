@@ -261,6 +261,7 @@ private fun WorkspaceScreen(
                 explorerState = explorerState,
                 tabsState = tabsState,
                 editorState = editorState,
+                isDarkTheme = isDarkTheme,
                 onExplorerEvent = explorerViewModel::onEvent,
                 onTabsEvent = tabsViewModel::onEvent,
                 onEditorEvent = editorViewModel::onEvent,
