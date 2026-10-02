@@ -3,6 +3,7 @@ package com.github.adibfara.mds.feature.explorer
 import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.model.SortOrder
+import com.github.adibfara.mds.core.persistence.ExplorerLayoutMode
 
 data class TreeRow(
     val node: FileNode,
@@ -55,4 +56,11 @@ data class ExplorerUiState(
     val dialog: ExplorerDialog? = null,
     val contextMenu: ContextMenuTarget? = null,
     val errorMessage: String? = null,
+    val followEnabled: Boolean = false,
+    val layoutMode: ExplorerLayoutMode = ExplorerLayoutMode.Tree,
+    val dualPaneFolders: List<FileNode> = emptyList(),
+    val dualPaneSelectedFolder: FilePath? = null,
+    val dualPaneFiles: List<FileNode> = emptyList(),
+    val favoritesFilterEnabled: Boolean = false,
+    val favoritedPaths: Set<FilePath> = emptySet(),
 )

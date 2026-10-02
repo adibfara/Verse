@@ -27,6 +27,12 @@ fun ExplorerToolbar(
     onNewFolder: () -> Unit,
     onSortOrderChange: (SortOrder) -> Unit,
     onCollapseAll: () -> Unit,
+    followEnabled: Boolean = false,
+    onToggleFollow: () -> Unit = {},
+    dualPaneEnabled: Boolean = false,
+    onToggleDualPane: () -> Unit = {},
+    favoritesFilterEnabled: Boolean = false,
+    onToggleFavoritesFilter: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var sortMenuVisible by remember { mutableStateOf(false) }
@@ -59,6 +65,24 @@ fun ExplorerToolbar(
             icon = MdsIcons.CollapseAll,
             contentDescription = "Collapse all",
             onClick = onCollapseAll,
+        )
+        MdsIconButton(
+            icon = MdsIcons.Target,
+            contentDescription = "Follow active file",
+            onClick = onToggleFollow,
+            selected = followEnabled,
+        )
+        MdsIconButton(
+            icon = MdsIcons.Columns,
+            contentDescription = "Toggle dual-pane layout",
+            onClick = onToggleDualPane,
+            selected = dualPaneEnabled,
+        )
+        MdsIconButton(
+            icon = MdsIcons.Heart,
+            contentDescription = "Show only favorites",
+            onClick = onToggleFavoritesFilter,
+            selected = favoritesFilterEnabled,
         )
 
         if (sortMenuVisible) {

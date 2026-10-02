@@ -143,6 +143,7 @@ private fun WorkspaceScreen(
         tabsViewModel = tabsViewModel,
         editorViewModel = editorViewModel,
         tabsState = tabsState,
+        explorerState = explorerState,
     )
 
     val clipboard = LocalClipboardManager.current

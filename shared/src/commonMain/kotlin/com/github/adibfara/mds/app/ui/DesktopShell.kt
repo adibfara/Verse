@@ -27,6 +27,8 @@ import com.github.adibfara.mds.feature.editor.EditorUiState
 import com.github.adibfara.mds.feature.editor.ui.EditorPane
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerUiState
+import com.github.adibfara.mds.core.persistence.ExplorerLayoutMode
+import com.github.adibfara.mds.feature.explorer.ui.DualPaneExplorer
 import com.github.adibfara.mds.feature.explorer.ui.ExplorerDialogHost
 import com.github.adibfara.mds.feature.explorer.ui.FileContextMenu
 import com.github.adibfara.mds.feature.explorer.ui.FileTree
@@ -75,11 +77,19 @@ fun DesktopShell(
 
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (appState.sidebarVisible) {
-                    FileTree(
-                        state = explorerState,
-                        onEvent = onExplorerEvent,
-                        modifier = Modifier.width(appState.sidebarWidth.dp).fillMaxHeight(),
-                    )
+                    if (explorerState.layoutMode == ExplorerLayoutMode.DualPane) {
+                        DualPaneExplorer(
+                            state = explorerState,
+                            onEvent = onExplorerEvent,
+                            modifier = Modifier.width(appState.sidebarWidth.dp * 1.6f).fillMaxHeight(),
+                        )
+                    } else {
+                        FileTree(
+                            state = explorerState,
+                            onEvent = onExplorerEvent,
+                            modifier = Modifier.width(appState.sidebarWidth.dp).fillMaxHeight(),
+                        )
+                    }
                     MdsSplitter(onDelta = onResizeSidebar)
                 }
 

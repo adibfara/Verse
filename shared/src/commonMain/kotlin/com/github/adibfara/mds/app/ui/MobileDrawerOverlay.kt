@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
+import com.github.adibfara.mds.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerUiState
+import com.github.adibfara.mds.feature.explorer.ui.DualPaneExplorer
 import com.github.adibfara.mds.feature.explorer.ui.FileTree
 
 @Composable
@@ -35,11 +37,19 @@ fun MobileDrawerOverlay(
                 .align(Alignment.CenterStart)
                 .clickable(onClick = {}),
         ) {
-            FileTree(
-                state = explorerState,
-                onEvent = onExplorerEvent,
-                modifier = Modifier.fillMaxSize(),
-            )
+            if (explorerState.layoutMode == ExplorerLayoutMode.DualPane) {
+                DualPaneExplorer(
+                    state = explorerState,
+                    onEvent = onExplorerEvent,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                FileTree(
+                    state = explorerState,
+                    onEvent = onExplorerEvent,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }

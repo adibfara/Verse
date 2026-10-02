@@ -9,6 +9,7 @@ import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.model.SortOrder
 import com.github.adibfara.mds.core.model.sortedBy
+import com.github.adibfara.mds.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.mds.core.persistence.SettingsStore
 import com.github.adibfara.mds.core.persistence.WorkspaceSessionRepository
 import com.github.adibfara.mds.core.platform.SystemOpener
@@ -58,16 +59,25 @@ class ExplorerViewModel(
                 if (opened == null) {
                     mutableState.value = ExplorerUiState()
                 } else {
+                    val session = sessionRepository.session.value
                     mutableState.value = ExplorerUiState(
                         spaceName = opened.space.name,
                         sortOrder = settingsStore.settings.value.sortOrder,
                         isLoading = true,
+                        followEnabled = session.followSelectionEnabled,
+                        layoutMode = session.explorerLayoutMode,
+                        dualPaneSelectedFolder = session.dualPaneSelectedFolder,
+                        favoritesFilterEnabled = session.favoritesFilterEnabled,
                     )
                     restoreExpanded()
                     loadDirectory(FilePath.Root)
                     expanded.toList().forEach { loadDirectory(it) }
                     mutableState.value = mutableState.value.copy(isLoading = false)
                     rebuildRows()
+                    if (mutableState.value.layoutMode == ExplorerLayoutMode.DualPane) {
+                        loadDualPaneFolders()
+                        session.dualPaneSelectedFolder?.let { selectDualPaneFolder(it) }
+                    }
                 }
             }
         }
@@ -126,6 +136,58 @@ class ExplorerViewModel(
                 loadDirectory(event.path)
                 rebuildRows()
             }
+
+            ExplorerEvent.ToggleFollowSelection -> toggleFollowSelection()
+            ExplorerEvent.ToggleLayoutMode -> toggleLayoutMode()
+            is ExplorerEvent.SelectDualPaneFolder -> selectDualPaneFolder(event.path)
+            ExplorerEvent.ToggleFavoritesFilter -> toggleFavoritesFilter()
+        }
+    }
+
+    private fun toggleFollowSelection() {
+        val enabled = !mutableState.value.followEnabled
+        mutableState.value = mutableState.value.copy(followEnabled = enabled)
+        sessionRepository.update { it.copy(followSelectionEnabled = enabled) }
+    }
+
+    private fun toggleFavoritesFilter() {
+        val enabled = !mutableState.value.favoritesFilterEnabled
+        mutableState.value = mutableState.value.copy(favoritesFilterEnabled = enabled)
+        sessionRepository.update { it.copy(favoritesFilterEnabled = enabled) }
+    }
+
+    private fun toggleLayoutMode() {
+        val next = if (mutableState.value.layoutMode == ExplorerLayoutMode.Tree) {
+            ExplorerLayoutMode.DualPane
+        } else {
+            ExplorerLayoutMode.Tree
+        }
+        mutableState.value = mutableState.value.copy(layoutMode = next)
+        sessionRepository.update { it.copy(explorerLayoutMode = next) }
+        if (next == ExplorerLayoutMode.DualPane) {
+            loadDualPaneFolders()
+            val selected = mutableState.value.dualPaneSelectedFolder ?: FilePath.Root
+            selectDualPaneFolder(selected)
+        }
+    }
+
+    private fun loadDualPaneFolders() {
+        viewModelScope.launch {
+            val target = fileSystem ?: return@launch
+            val folders = runCatching { target.listDirectoriesRecursively() }.getOrElse { emptyList() }
+            mutableState.value = mutableState.value.copy(dualPaneFolders = folders)
+        }
+    }
+
+    private fun selectDualPaneFolder(path: FilePath) {
+        viewModelScope.launch {
+            val target = fileSystem ?: return@launch
+            val files = runCatching { target.listChildren(path) }.getOrElse { emptyList() }
+            mutableState.value = mutableState.value.copy(
+                dualPaneSelectedFolder = path,
+                dualPaneFiles = files,
+            )
+            sessionRepository.update { it.copy(dualPaneSelectedFolder = path) }
         }
     }
 

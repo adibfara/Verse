@@ -49,6 +49,14 @@ sealed interface ExplorerEvent {
     data object DismissError : ExplorerEvent
 
     data class Refresh(val path: FilePath) : ExplorerEvent
+
+    data object ToggleFollowSelection : ExplorerEvent
+
+    data object ToggleLayoutMode : ExplorerEvent
+
+    data class SelectDualPaneFolder(val path: FilePath) : ExplorerEvent
+
+    data object ToggleFavoritesFilter : ExplorerEvent
 }
 
 sealed interface ExplorerAction {

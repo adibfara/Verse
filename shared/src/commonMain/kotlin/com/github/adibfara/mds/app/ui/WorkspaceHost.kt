@@ -13,6 +13,7 @@ import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.feature.editor.EditorEvent
 import com.github.adibfara.mds.feature.editor.EditorViewModel
 import com.github.adibfara.mds.feature.explorer.ExplorerAction
+import com.github.adibfara.mds.feature.explorer.ExplorerUiState
 import com.github.adibfara.mds.feature.explorer.ExplorerViewModel
 import com.github.adibfara.mds.feature.viewer.ui.SpaceImageLoader
 import com.github.adibfara.mds.feature.space.SpaceRepository
@@ -28,6 +29,7 @@ fun WorkspaceEffects(
     tabsViewModel: TabsViewModel,
     editorViewModel: EditorViewModel,
     tabsState: TabsUiState,
+    explorerState: ExplorerUiState,
 ) {
     LaunchedEffect(workspaceViewModel) {
         workspaceViewModel.restores.collect { restore ->
@@ -68,6 +70,15 @@ fun WorkspaceEffects(
             editorViewModel.onEvent(EditorEvent.ClearActive)
         } else {
             editorViewModel.onEvent(EditorEvent.Open(activeTab.path, activeTab.kind))
+            if (explorerViewModel.state.value.followEnabled) {
+                explorerViewModel.revealPath(activeTab.path)
+            }
+        }
+    }
+
+    LaunchedEffect(explorerState.followEnabled) {
+        if (explorerState.followEnabled) {
+            activeTab?.path?.let { explorerViewModel.revealPath(it) }
         }
     }
 }
