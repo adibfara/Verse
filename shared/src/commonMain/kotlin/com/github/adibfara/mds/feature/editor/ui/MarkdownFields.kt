@@ -54,6 +54,7 @@ import com.github.adibfara.mds.core.markdown.MdTask
 import com.github.adibfara.mds.core.markdown.SpecialSpanKind
 import com.github.adibfara.mds.core.markdown.StyleKind
 import com.github.adibfara.mds.core.markdown.TaskBoxPlaceholder
+import com.github.adibfara.mds.core.markdown.hasListContinuation
 import com.github.adibfara.mds.core.markdown.headingLevelAt
 import com.github.adibfara.mds.core.markdown.inlineFormatsCovering
 import com.github.adibfara.mds.core.markdown.lineMarkerKindAt
@@ -213,6 +214,10 @@ private fun MaskedMarkdownField(
                     layoutOf = { layout.value },
                     column = column,
                     onValueChange = onValueChange,
+                )
+                .listContinuationKeys(
+                    value = value,
+                    onContinueList = { onFormat(FormatAction.ContinueList) },
                 ),
             textStyle = MdsTheme.typography.editorBody.copy(color = colors.textPrimary),
             cursorBrush = SolidColor(colors.caret),
@@ -565,6 +570,21 @@ private fun Modifier.verticalCaretKeys(
     val layout = layoutOf() ?: return@onPreviewKeyEvent false
     val moved = caretByLine(value, masked, layout, downwards, column)
     onValueChange(moved)
+    true
+}
+
+private fun Modifier.listContinuationKeys(
+    value: TextFieldValue,
+    onContinueList: () -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    if (event.key != Key.Enter) return@onPreviewKeyEvent false
+    if (event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
+        return@onPreviewKeyEvent false
+    }
+    if (value.selection.start != value.selection.end) return@onPreviewKeyEvent false
+    if (!hasListContinuation(value.text, value.selection.start)) return@onPreviewKeyEvent false
+    onContinueList()
     true
 }
 

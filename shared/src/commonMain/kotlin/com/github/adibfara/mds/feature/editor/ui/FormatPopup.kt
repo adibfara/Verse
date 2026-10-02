@@ -202,6 +202,19 @@ private fun LineMarkerButtons(state: FormatPopupState, onAction: (FormatAction) 
         )
     }
     FormatButton(
+        selected = state.lineMarker == LineMarkerKind.Ordered,
+        onClick = {
+            onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.Ordered))
+        },
+    ) { color ->
+        MdsIcon(
+            icon = MdsIcons.ListOrdered,
+            contentDescription = "Numbered list",
+            tint = color,
+            size = MdsTheme.sizes.iconSmall,
+        )
+    }
+    FormatButton(
         selected = state.lineMarker == LineMarkerKind.None,
         onClick = {
             onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.None))

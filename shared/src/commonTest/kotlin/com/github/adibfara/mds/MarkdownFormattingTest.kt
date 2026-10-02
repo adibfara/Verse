@@ -174,6 +174,69 @@ class MarkdownFormattingTest {
     }
 
     @Test
+    fun settingOrderedOnABulletStartsCountingFromOne() {
+        assertEquals(
+            "1. milk",
+            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Ordered)).text,
+        )
+    }
+
+    @Test
+    fun settingOrderedContinuesFromThePreviousSiblingNumber() {
+        val text = "1. first\n- second"
+        val edit = applyFormatAction(text, MdRange(0, 0), FormatAction.SetLineMarker(9, LineMarkerKind.Ordered))
+        assertEquals("1. first\n2. second", edit.text)
+    }
+
+    @Test
+    fun reapplyingOrderedOnAnOrderedLineKeepsItsNumberAndSeparator() {
+        assertEquals(
+            "3) step",
+            applyFormatAction("3) step", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Ordered)).text,
+        )
+    }
+
+    @Test
+    fun orderedKindIsReadFromTheSourceLine() {
+        val text = "1. first\n- second\nplain"
+        assertEquals(LineMarkerKind.Ordered, lineMarkerKindAt(text, 0))
+        assertEquals(LineMarkerKind.Bullet, lineMarkerKindAt(text, 10))
+        assertEquals(LineMarkerKind.None, lineMarkerKindAt(text, 19))
+    }
+
+    @Test
+    fun enterContinuesABulletList() {
+        val edit = applyFormatAction("- first", MdRange(7, 7), FormatAction.ContinueList)
+        assertEquals("- first\n- ", edit.text)
+        assertEquals(MdRange(10, 10), edit.selection)
+    }
+
+    @Test
+    fun enterContinuesAnOrderedListWithTheNextNumber() {
+        val edit = applyFormatAction("1. first", MdRange(8, 8), FormatAction.ContinueList)
+        assertEquals("1. first\n2. ", edit.text)
+    }
+
+    @Test
+    fun enterContinuesATaskAsUnchecked() {
+        val edit = applyFormatAction("- [x] done", MdRange(10, 10), FormatAction.ContinueList)
+        assertEquals("- [x] done\n- [ ] ", edit.text)
+    }
+
+    @Test
+    fun enterOnAnEmptyListItemRemovesTheMarkerInstead() {
+        val edit = applyFormatAction("- first\n- ", MdRange(10, 10), FormatAction.ContinueList)
+        assertEquals("- first\n", edit.text)
+        assertEquals(MdRange(8, 8), edit.selection)
+    }
+
+    @Test
+    fun enterDoesNothingOnAPlainLine() {
+        val edit = applyFormatAction("plain text", MdRange(10, 10), FormatAction.ContinueList)
+        assertEquals("plain text", edit.text)
+    }
+
+    @Test
     fun lineMarkerOnlyTouchesItsOwnLine() {
         val text = "- one\n- [ ] two\n- three"
         val edit = applyFormatAction(text, MdRange(0, 0), FormatAction.SetLineMarker(6, LineMarkerKind.None))
