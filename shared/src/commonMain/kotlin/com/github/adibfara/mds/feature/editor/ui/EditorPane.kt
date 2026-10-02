@@ -1,17 +1,24 @@
 package com.github.adibfara.mds.feature.editor.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.github.adibfara.mds.core.markdown.FormatAction
 import com.github.adibfara.mds.core.markdown.MdRange
@@ -75,7 +82,10 @@ private fun EditorContent(
     onEvent: (EditorEvent) -> Unit,
     onOpenLink: (String) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
+    val scrollState = remember(state.path) { ScrollState(0) }
+    val focusRequester = remember(state.path) { FocusRequester() }
+    val interactionSource = remember { MutableInteractionSource() }
+    val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
@@ -83,9 +93,12 @@ private fun EditorContent(
                 .widthIn(max = MdsTheme.sizes.editorMaxWidth)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
+                .clickable(interactionSource = interactionSource, indication = null) {
+                    onValueChange(state.value.copy(selection = TextRange(state.value.text.length)))
+                    focusRequester.requestFocus()
+                }
                 .padding(horizontal = MdsTheme.spacing.xl, vertical = MdsTheme.spacing.lg),
         ) {
-            val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
             val onToggleTask: (MdRange, Boolean) -> Unit = { range, checked ->
                 onEvent(EditorEvent.ToggleTask(range, checked))
             }
@@ -98,6 +111,7 @@ private fun EditorContent(
                     onToggleTask = onToggleTask,
                     onOpenLink = onOpenLink,
                     onFormat = onFormat,
+                    focusRequester = focusRequester,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -108,15 +122,18 @@ private fun EditorContent(
                     onToggleTask = onToggleTask,
                     onOpenLink = onOpenLink,
                     onFormat = onFormat,
+                    focusRequester = focusRequester,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 EditorMode.Raw -> RawMarkdownField(
                     value = state.value,
                     onValueChange = onValueChange,
+                    focusRequester = focusRequester,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            Spacer(modifier = Modifier.height(MdsTheme.sizes.editorBottomPadding))
         }
     }
 }

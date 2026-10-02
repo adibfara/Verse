@@ -13,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -73,6 +75,7 @@ fun RenderedMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     MaskedMarkdownField(
@@ -83,6 +86,7 @@ fun RenderedMarkdownField(
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
+        focusRequester = focusRequester,
         modifier = modifier,
     )
 }
@@ -95,6 +99,7 @@ fun LiveMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     val revealedLine = remember(value.text, value.selection.start) {
@@ -108,6 +113,7 @@ fun LiveMarkdownField(
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
+        focusRequester = focusRequester,
         modifier = modifier,
     )
 }
@@ -121,6 +127,7 @@ private fun MaskedMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     val styles = rememberMarkdownStyles()
@@ -187,6 +194,7 @@ private fun MaskedMarkdownField(
             },
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .then(taps)
                 .pointerHoverIcon(
                     icon = if (overTarget.value) PointerIcon.Hand else PointerIcon.Default,
@@ -311,13 +319,14 @@ private fun markerGlyphRange(masked: MaskedDocument, line: MdRange): MdRange? {
 fun RawMarkdownField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
+    focusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = MdsTheme.colors
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier,
+        modifier = if (focusRequester != null) modifier.focusRequester(focusRequester) else modifier,
         textStyle = MdsTheme.typography.editorRaw.copy(color = colors.textPrimary),
         cursorBrush = SolidColor(colors.caret),
     )
