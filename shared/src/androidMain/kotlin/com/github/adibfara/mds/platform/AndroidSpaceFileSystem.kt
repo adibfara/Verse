@@ -1,65 +1,75 @@
 package com.github.adibfara.mds.core.filesystem
 
+import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.model.Space
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 
-private val DemoSpaceContent = mapOf(
-    "Welcome.md" to """
-        # Welcome to MDs
+private const val PollIntervalMillis = 1500L
 
-        A deliberately small markdown workspace.
+class AndroidSpaceFileSystem(root: Path) : JvmSpaceFileSystem(root) {
 
-        ## What works here
+    override fun watch(path: FilePath): Flow<FileChange> = callbackFlow {
+        val directory = resolve(path)
+        if (!Files.isDirectory(directory)) {
+            close()
+            return@callbackFlow
+        }
+        var snapshot = snapshotOf(directory)
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                delay(PollIntervalMillis)
+                val current = snapshotOf(directory)
+                if (current != snapshot) {
+                    val previousNames = snapshot.keys
+                    val currentNames = current.keys
+                    (currentNames - previousNames).forEach { name ->
+                        trySend(FileChange.Created(relativize(directory.resolve(name))))
+                    }
+                    (previousNames - currentNames).forEach { name ->
+                        trySend(FileChange.Deleted(relativize(directory.resolve(name))))
+                    }
+                    currentNames.intersect(previousNames).forEach { name ->
+                        if (current[name] != snapshot[name]) {
+                            trySend(FileChange.Modified(relativize(directory.resolve(name))))
+                        }
+                    }
+                    snapshot = current
+                }
+            }
+        }
+        awaitClose { job.cancel() }
+    }.flowOn(Dispatchers.IO)
 
-        - Browse folders in the sidebar
-        - Open files as tabs
-        - Edit with **live** styling
-
-        - [ ] Try the preview mode
-        - [x] Open a note
-
-        Switch to *raw* mode to see the markdown source exactly as written.
-    """.trimIndent(),
-    "Projects/MDs.md" to """
-        # Test header
-
-        ## Test subtitle
-
-        test text
-
-        - Bullets
-            - bullets
-            - bullet 2
-
-        - [ ] Check list
-
-        *italic* and **bold**
-    """.trimIndent(),
-    "Projects/Roadmap.md" to """
-        # Roadmap
-
-        1. Indexing
-        2. Backlinks
-        3. Graph view
-
-        > Everything here is stored in memory on Android for now.
-    """.trimIndent(),
-    "Daily/2026-10-02.md" to """
-        # 2026-10-02
-
-        - Morning notes
-        - Afternoon notes
-
-        `inline code` and a [link](https://example.com).
-    """.trimIndent(),
-    "Resources/Notes.txt" to "A plain text file opens in raw mode.",
-)
+    private fun snapshotOf(directory: Path): Map<String, Long> = runCatching {
+        Files.newDirectoryStream(directory).use { stream ->
+            stream
+                .filter { !isHidden(it.fileName.toString()) }
+                .associate { child ->
+                    child.fileName.toString() to runCatching {
+                        Files.getLastModifiedTime(child).toMillis()
+                    }.getOrDefault(0L)
+                }
+        }
+    }.getOrDefault(emptyMap())
+}
 
 private class AndroidSpaceFileSystemFactory : SpaceFileSystemFactory {
 
     private val instances = mutableMapOf<String, SpaceFileSystem>()
 
     override fun create(space: Space): SpaceFileSystem = instances.getOrPut(space.location) {
-        InMemorySpaceFileSystem(rootLocation = space.location, seed = DemoSpaceContent)
+        AndroidSpaceFileSystem(Paths.get(space.location).toAbsolutePath().normalize())
     }
 }
 

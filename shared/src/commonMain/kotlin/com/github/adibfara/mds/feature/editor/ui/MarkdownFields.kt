@@ -63,6 +63,7 @@ import kotlinx.coroutines.delay
 
 private const val TapPadding = 3f
 private const val PopupLingerMillis = 700L
+private const val PopupShowDelayMillis = 320L
 
 @Composable
 fun RenderedMarkdownField(
@@ -161,6 +162,7 @@ private fun MaskedMarkdownField(
     LaunchedEffect(hoveredAnchor.value, popupHovered.value) {
         val anchor = hoveredAnchor.value
         if (anchor != null) {
+            if (lingeringAnchor.value == null) delay(PopupShowDelayMillis)
             lingeringAnchor.value = anchor
             return@LaunchedEffect
         }

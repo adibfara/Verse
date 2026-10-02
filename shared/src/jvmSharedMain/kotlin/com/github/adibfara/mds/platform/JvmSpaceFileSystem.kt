@@ -3,12 +3,11 @@ package com.github.adibfara.mds.core.filesystem
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
-import com.github.adibfara.mds.core.model.Space
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.Paths
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardWatchEventKinds
@@ -29,13 +28,13 @@ import kotlinx.coroutines.withContext
 
 internal const val MdsMetadataDirectory = ".mds"
 
-class JvmSpaceFileSystem(
-    private val root: Path,
+open class JvmSpaceFileSystem(
+    protected val root: Path,
 ) : SpaceFileSystem {
 
     override val rootLocation: String = root.absolutePathString()
 
-    private fun resolve(path: FilePath): Path {
+    protected fun resolve(path: FilePath): Path {
         val resolved = if (path.isRoot) root else root.resolve(path.value).normalize()
         if (!resolved.startsWith(root)) {
             throw FileSystemException("Path escapes the space: ${path.value}")
@@ -43,12 +42,12 @@ class JvmSpaceFileSystem(
         return resolved
     }
 
-    private fun relativize(absolute: Path): FilePath {
+    protected fun relativize(absolute: Path): FilePath {
         val relative = root.relativize(absolute).toString().replace('\\', '/')
         return FilePath(relative)
     }
 
-    private fun isHidden(name: String): Boolean = name.startsWith(".")
+    protected fun isHidden(name: String): Boolean = name.startsWith(".")
 
     private fun toNode(absolute: Path, attributes: BasicFileAttributes): FileNode {
         val path = relativize(absolute)
@@ -80,7 +79,7 @@ class JvmSpaceFileSystem(
     override suspend fun readText(path: FilePath): String = withContext(Dispatchers.IO) {
         val file = resolve(path)
         if (!Files.isRegularFile(file)) throw FileSystemException("Not a file: ${path.value}")
-        Files.readString(file)
+        String(Files.readAllBytes(file), StandardCharsets.UTF_8)
     }
 
     override suspend fun readBytes(path: FilePath): ByteArray = withContext(Dispatchers.IO) {
@@ -91,7 +90,7 @@ class JvmSpaceFileSystem(
         val file = resolve(path)
         Files.createDirectories(file.parent)
         val temporary = file.parent.resolve("${file.name}.mds-tmp")
-        Files.writeString(temporary, content)
+        Files.write(temporary, content.toByteArray(StandardCharsets.UTF_8))
         runCatching {
             Files.move(
                 temporary,
@@ -318,10 +317,3 @@ class JvmSpaceFileSystem(
         }
     }.flowOn(Dispatchers.IO)
 }
-
-private class JvmSpaceFileSystemFactory : SpaceFileSystemFactory {
-    override fun create(space: Space): SpaceFileSystem =
-        JvmSpaceFileSystem(Paths.get(space.location).toAbsolutePath().normalize())
-}
-
-actual fun createSpaceFileSystemFactory(): SpaceFileSystemFactory = JvmSpaceFileSystemFactory()

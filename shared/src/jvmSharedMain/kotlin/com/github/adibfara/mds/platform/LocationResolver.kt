@@ -3,7 +3,7 @@ package com.github.adibfara.mds.core.platform
 import java.nio.file.Files
 import java.nio.file.Paths
 
-private class JvmLocationResolver : LocationResolver {
+private class NioLocationResolver : LocationResolver {
 
     private fun normalized(location: String) = Paths.get(location).toAbsolutePath().normalize()
 
@@ -30,4 +30,4 @@ private class JvmLocationResolver : LocationResolver {
     }.getOrNull()
 }
 
-actual fun createLocationResolver(): LocationResolver = JvmLocationResolver()
+actual fun createLocationResolver(): LocationResolver = NioLocationResolver()

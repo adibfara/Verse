@@ -149,7 +149,7 @@ class EditorViewModel(
         }
     }
 
-    private fun textChanged(value: TextFieldValue) {
+    private fun textChanged(value: TextFieldValue, reparse: Boolean = true) {
         val session = activeSession() ?: return
         val textChanged = session.value.text != value.text
         val wasDirty = session.isDirty
@@ -163,6 +163,10 @@ class EditorViewModel(
         }
 
         if (session.kind == FileKind.Markdown) {
+            if (!reparse) {
+                saveDebouncer.submit { flushAll() }
+                return
+            }
             parseDebouncer.submit {
                 val snapshot = session.value.text
                 val parsed = withContext(dispatchers.default) { parser.parse(snapshot) }
@@ -214,13 +218,25 @@ class EditorViewModel(
     private fun applyFormat(action: FormatAction) {
         val session = activeSession() ?: return
         if (session.kind != FileKind.Markdown) return
-        val edit = applyFormatAction(session.value.text, action)
-        if (edit.text == session.value.text) return
+        val current = session.value
+        val edit = applyFormatAction(
+            text = current.text,
+            selection = MdRange(current.selection.min, current.selection.max),
+            action = action,
+        )
+        if (edit.text == current.text) return
+        session.document = parser.parse(edit.text)
+        val reversed = current.selection.start > current.selection.end
         textChanged(
-            TextFieldValue(
+            value = TextFieldValue(
                 text = edit.text,
-                selection = TextRange(edit.selection.start, edit.selection.end),
+                selection = if (reversed) {
+                    TextRange(edit.selection.end, edit.selection.start)
+                } else {
+                    TextRange(edit.selection.start, edit.selection.end)
+                },
             ),
+            reparse = false,
         )
     }
 
