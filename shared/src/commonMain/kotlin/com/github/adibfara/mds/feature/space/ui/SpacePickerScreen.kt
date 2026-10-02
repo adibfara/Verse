@@ -33,6 +33,10 @@ fun SpacePickerScreen(
     onForgetRecent: (RecentSpace) -> Unit,
     onChooseFolder: () -> Unit,
     modifier: Modifier = Modifier,
+    showStorageOnboarding: Boolean = false,
+    isStorageAccessGranted: Boolean = true,
+    onRequestStorageAccess: () -> Unit = {},
+    onUseInternalFolder: () -> Unit = {},
 ) {
     val colors = MdsTheme.colors
     Box(
@@ -56,11 +60,27 @@ fun SpacePickerScreen(
                 color = colors.textSecondary,
             )
 
+            if (showStorageOnboarding && !isStorageAccessGranted) {
+                MdsButton(
+                    label = "Grant full storage access",
+                    onClick = onRequestStorageAccess,
+                    primary = true,
+                )
+            }
+
             if (canChooseFolder) {
                 MdsButton(
-                    label = "Open a folder...",
+                    label = "Add a space...",
                     onClick = onChooseFolder,
-                    primary = true,
+                    primary = !showStorageOnboarding || isStorageAccessGranted,
+                )
+            }
+
+            if (showStorageOnboarding) {
+                MdsButton(
+                    label = "Use the app's internal folder",
+                    onClick = onUseInternalFolder,
+                    primary = false,
                 )
             }
 

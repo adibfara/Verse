@@ -30,6 +30,7 @@ import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.designsystem.theme.resolveTheme
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.platform.LocationResolver
+import com.github.adibfara.mds.core.platform.PlatformFolderPickerOverlay
 import com.github.adibfara.mds.core.platform.PlatformKind
 import com.github.adibfara.mds.core.platform.SystemOpener
 import com.github.adibfara.mds.core.platform.currentPlatformKind
@@ -65,16 +66,25 @@ fun AppRoot(
 
     LaunchedEffect(Unit) { workspaceViewModel.start(launchArguments) }
 
+    val isMobile = currentPlatformKind() == PlatformKind.Mobile
+    LaunchedEffect(appState.hasSpace) {
+        if (isMobile && !appState.hasSpace) workspaceViewModel.refreshStorageAccess()
+    }
+
     MdsTheme(theme = theme, editorFontSize = appState.settings.editorFontSize) {
         Box(modifier = Modifier.fillMaxSize().background(MdsTheme.colors.window)) {
             when {
                 !appState.isReady -> Unit
                 !appState.hasSpace -> SpacePickerScreen(
                     recentSpaces = appState.recentSpaces,
-                    canChooseFolder = currentPlatformKind() == PlatformKind.Desktop,
+                    canChooseFolder = !isMobile || appState.isStorageAccessGranted,
                     onOpenRecent = workspaceViewModel::openRecent,
                     onForgetRecent = workspaceViewModel::forgetRecent,
                     onChooseFolder = workspaceViewModel::chooseFolder,
+                    showStorageOnboarding = isMobile,
+                    isStorageAccessGranted = appState.isStorageAccessGranted,
+                    onRequestStorageAccess = workspaceViewModel::requestStorageAccess,
+                    onUseInternalFolder = workspaceViewModel::openInternalFolder,
                 )
 
                 else -> WorkspaceScreen(
@@ -84,6 +94,7 @@ fun AppRoot(
                     windowChrome = windowChrome,
                 )
             }
+            PlatformFolderPickerOverlay()
         }
     }
 }

@@ -89,13 +89,23 @@ private class JvmLocationPicker : LocationPicker {
     }
 }
 
+private class JvmStoragePermission : StoragePermission {
+    override fun isGranted(): Boolean = true
+    override suspend fun request(): Boolean = true
+}
+
 actual fun createSystemOpener(): SystemOpener = JvmSystemOpener()
 
 actual fun createAppPaths(): AppPaths = JvmAppPaths()
 
 actual fun createLocationPicker(): LocationPicker = JvmLocationPicker()
 
+actual fun createStoragePermission(): StoragePermission = JvmStoragePermission()
+
 actual fun currentPlatformKind(): PlatformKind = PlatformKind.Desktop
 
 @Composable
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = Unit
+
+@Composable
+actual fun PlatformFolderPickerOverlay() = Unit

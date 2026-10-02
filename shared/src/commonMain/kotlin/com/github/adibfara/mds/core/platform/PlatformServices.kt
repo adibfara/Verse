@@ -18,6 +18,11 @@ interface LocationPicker {
     suspend fun pickFile(title: String): String?
 }
 
+interface StoragePermission {
+    fun isGranted(): Boolean
+    suspend fun request(): Boolean
+}
+
 enum class PlatformKind {
     Desktop,
     Mobile;
@@ -31,7 +36,12 @@ expect fun createAppPaths(): AppPaths
 
 expect fun createLocationPicker(): LocationPicker
 
+expect fun createStoragePermission(): StoragePermission
+
 expect fun currentPlatformKind(): PlatformKind
 
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
+
+@Composable
+expect fun PlatformFolderPickerOverlay()

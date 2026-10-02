@@ -11,7 +11,9 @@ import com.github.adibfara.mds.core.persistence.SettingsStore
 import com.github.adibfara.mds.core.persistence.StartupBehavior
 import com.github.adibfara.mds.core.persistence.WorkspaceSessionRepository
 import com.github.adibfara.mds.core.persistence.WorkspaceState
+import com.github.adibfara.mds.core.platform.AppPaths
 import com.github.adibfara.mds.core.platform.LocationPicker
+import com.github.adibfara.mds.core.platform.StoragePermission
 import com.github.adibfara.mds.feature.space.SpaceRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,7 @@ data class AppUiState(
     val space: Space? = null,
     val sidebarVisible: Boolean = true,
     val sidebarWidth: Float = 260f,
+    val isStorageAccessGranted: Boolean = true,
 ) {
     val hasSpace: Boolean get() = space != null
 
@@ -42,9 +45,13 @@ class WorkspaceViewModel(
     private val spaceRepository: SpaceRepository,
     private val sessionRepository: WorkspaceSessionRepository,
     private val locationPicker: LocationPicker,
+    private val appPaths: AppPaths,
+    private val storagePermission: StoragePermission,
 ) : ViewModel() {
 
-    private val mutableState = MutableStateFlow(AppUiState())
+    private val mutableState = MutableStateFlow(
+        AppUiState(isStorageAccessGranted = storagePermission.isGranted()),
+    )
     val state: StateFlow<AppUiState> = mutableState.asStateFlow()
 
     private val mutableRestores = MutableSharedFlow<SessionRestore>(
@@ -95,6 +102,21 @@ class WorkspaceViewModel(
     fun openRecent(recent: RecentSpace) = openFolder(recent.location)
 
     fun forgetRecent(recent: RecentSpace) = settingsStore.forgetSpace(recent)
+
+    fun openInternalFolder() = openFolder(appPaths.appDataDirectory)
+
+    fun requestStorageAccess() {
+        viewModelScope.launch {
+            val granted = storagePermission.request()
+            mutableState.value = mutableState.value.copy(isStorageAccessGranted = granted)
+        }
+    }
+
+    fun refreshStorageAccess() {
+        mutableState.value = mutableState.value.copy(
+            isStorageAccessGranted = storagePermission.isGranted(),
+        )
+    }
 
     fun openSingleFile(filePath: String) {
         viewModelScope.launch {
