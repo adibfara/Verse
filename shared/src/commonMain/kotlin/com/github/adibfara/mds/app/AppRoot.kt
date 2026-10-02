@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -15,7 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.adibfara.mds.app.ui.DesktopShell
 import com.github.adibfara.mds.app.ui.MobileShell
@@ -74,7 +78,7 @@ fun AppRoot(
     MdsTheme(theme = theme, editorFontSize = appState.settings.editorFontSize) {
         Box(modifier = Modifier.fillMaxSize().background(MdsTheme.colors.window)) {
             when {
-                !appState.isReady -> Unit
+                !appState.isReady -> if (isMobile) StartupLoadingIndicator() else Unit
                 !appState.hasSpace -> SpacePickerScreen(
                     recentSpaces = appState.recentSpaces,
                     canChooseFolder = !isMobile || appState.isStorageAccessGranted,
@@ -96,6 +100,17 @@ fun AppRoot(
             }
             PlatformFolderPickerOverlay()
         }
+    }
+}
+
+@Composable
+private fun StartupLoadingIndicator() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(
+            color = MdsTheme.colors.accent,
+            modifier = Modifier.size(28.dp),
+            strokeWidth = 2.5.dp,
+        )
     }
 }
 
