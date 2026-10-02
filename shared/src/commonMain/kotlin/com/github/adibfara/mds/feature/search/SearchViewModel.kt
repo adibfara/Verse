@@ -9,6 +9,7 @@ import com.github.adibfara.mds.core.command.fuzzyScore
 import com.github.adibfara.mds.core.common.DispatcherProvider
 import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
+import com.github.adibfara.mds.feature.explorer.usecase.CreateNote
 import com.github.adibfara.mds.feature.space.SpaceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,6 +46,7 @@ sealed interface SearchResult {
     data class File(val node: FileNode) : SearchResult
     data class Match(val path: FilePath, val lineNumber: Int, val line: String) : SearchResult
     data class Action(val command: Command) : SearchResult
+    data class CreateNote(val name: String) : SearchResult
 }
 
 data class SearchUiState(
@@ -118,8 +120,24 @@ class SearchViewModel(
             is SearchResult.File -> mutableActions.tryEmit(SearchAction.OpenFile(result.node.path))
             is SearchResult.Match -> mutableActions.tryEmit(SearchAction.OpenFile(result.path))
             is SearchResult.Action -> mutableActions.tryEmit(SearchAction.RunCommand(result.command.id))
+            is SearchResult.CreateNote -> {
+                createNote(result.name)
+                return
+            }
         }
         close()
+    }
+
+    private fun createNote(name: String) {
+        val fileSystem = spaceRepository.current.value?.fileSystem ?: return
+        viewModelScope.launch {
+            val created = runCatching { CreateNote(fileSystem)(FilePath.Root, name) }.getOrNull()
+            if (created != null) {
+                cachedFiles = null
+                mutableActions.tryEmit(SearchAction.OpenFile(created))
+            }
+            close()
+        }
     }
 
     private fun runSearch(query: String) {
@@ -152,7 +170,7 @@ class SearchViewModel(
     private suspend fun searchFileNames(query: String): List<SearchResult> {
         val files = allFiles()
         if (query.isBlank()) return files.take(50).map(SearchResult::File)
-        return withContext(dispatchers.default) {
+        val matches = withContext(dispatchers.default) {
             files
                 .mapNotNull { file ->
                     val score = fuzzyScore(file.name, query) ?: fuzzyScore(file.path.value, query)
@@ -162,6 +180,7 @@ class SearchViewModel(
                 .take(50)
                 .map { SearchResult.File(it.first) }
         }
+        return matches.ifEmpty { listOf(SearchResult.CreateNote(query.trim())) }
     }
 
     private suspend fun searchContents(query: String): List<SearchResult> {

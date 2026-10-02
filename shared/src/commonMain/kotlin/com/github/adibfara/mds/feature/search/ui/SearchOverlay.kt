@@ -3,6 +3,7 @@ package com.github.adibfara.mds.feature.search.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,8 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.github.adibfara.mds.core.designsystem.component.MdsIcon
+import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MdsText
 import com.github.adibfara.mds.core.designsystem.component.MdsTextField
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
@@ -59,7 +62,16 @@ fun SearchOverlay(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
-        Box(modifier = Modifier.fillMaxSize().background(colors.overlay)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.overlay)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+        ) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -67,6 +79,11 @@ fun SearchOverlay(
                     .widthIn(min = 460.dp, max = 720.dp)
                     .background(colors.surfaceRaised, MdsTheme.shapes.large)
                     .border(MdsTheme.sizes.borderWidth, colors.border, MdsTheme.shapes.large)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {},
+                    )
                     .padding(MdsTheme.spacing.md)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -206,6 +223,21 @@ private fun SearchResultRow(
                         maxLines = 1,
                     )
                 }
+            }
+
+            is SearchResult.CreateNote -> {
+                MdsIcon(
+                    icon = MdsIcons.FilePlus,
+                    contentDescription = null,
+                    tint = colors.textMuted,
+                )
+                MdsText(
+                    text = "Create note \"${result.name}\"",
+                    style = MdsTheme.typography.uiBody,
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = MdsTheme.spacing.sm).weight(1f),
+                )
             }
         }
     }
