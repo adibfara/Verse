@@ -49,8 +49,11 @@ fun EditorPane(
                 breadcrumb = state.breadcrumb,
                 mode = state.mode,
                 isDirty = state.isDirty,
+                isFavorite = state.isFavorite,
                 onModeChange = { onEvent(EditorEvent.SetMode(it)) },
                 onRevealInFileManager = onRevealInFileManager,
+                onToggleFavorite = { onEvent(EditorEvent.ToggleFavorite) },
+                onRenameTitle = { onEvent(EditorEvent.RequestRename(it)) },
             )
             MdsDivider()
         }

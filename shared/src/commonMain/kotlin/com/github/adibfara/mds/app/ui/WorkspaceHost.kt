@@ -10,6 +10,7 @@ import com.github.adibfara.mds.app.WorkspaceViewModel
 import com.github.adibfara.mds.core.filesystem.SpaceFileSystem
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.core.model.FilePath
+import com.github.adibfara.mds.feature.editor.EditorAction
 import com.github.adibfara.mds.feature.editor.EditorEvent
 import com.github.adibfara.mds.feature.editor.EditorViewModel
 import com.github.adibfara.mds.feature.explorer.ExplorerAction
@@ -61,6 +62,14 @@ fun WorkspaceEffects(
     LaunchedEffect(editorViewModel) {
         editorViewModel.dirtyChanges.collect { change ->
             tabsViewModel.onEvent(TabsEvent.MarkDirty(change.path, change.isDirty))
+        }
+    }
+
+    LaunchedEffect(editorViewModel) {
+        editorViewModel.actions.collect { action ->
+            when (action) {
+                is EditorAction.Renamed -> tabsViewModel.onEvent(TabsEvent.Renamed(action.from, action.to))
+            }
         }
     }
 

@@ -8,6 +8,8 @@ import com.github.adibfara.mds.core.model.Space
 import com.github.adibfara.mds.core.model.SpaceId
 import com.github.adibfara.mds.core.persistence.SettingsStore
 import com.github.adibfara.mds.core.platform.LocationResolver
+import com.github.adibfara.mds.feature.favorites.FavoritesRepository
+import com.github.adibfara.mds.feature.favorites.ReferenceTrackingFileSystem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 data class OpenedSpace(
     val space: Space,
     val fileSystem: SpaceFileSystem,
+    val favorites: FavoritesRepository,
     val initialFile: FilePath? = null,
 )
 
@@ -36,7 +39,10 @@ class SpaceRepository(
     )
 
     fun open(space: Space): OpenedSpace {
-        val opened = OpenedSpace(space = space, fileSystem = fileSystemFactory.create(space))
+        val raw = fileSystemFactory.create(space)
+        val favorites = FavoritesRepository(raw)
+        val fileSystem = ReferenceTrackingFileSystem(raw, favorites)
+        val opened = OpenedSpace(space = space, fileSystem = fileSystem, favorites = favorites)
         openedSpace.value = opened
         settingsStore.rememberSpace(space, currentTimeMillis())
         return opened
@@ -47,11 +53,14 @@ class SpaceRepository(
     fun openSingleFile(filePath: String): OpenedSpace? {
         val parent = locationResolver.parentOf(filePath) ?: return null
         val space = spaceAt(parent, ephemeral = true)
-        val fileSystem = fileSystemFactory.create(space)
+        val raw = fileSystemFactory.create(space)
+        val favorites = FavoritesRepository(raw)
+        val fileSystem = ReferenceTrackingFileSystem(raw, favorites)
         val relative = locationResolver.relativize(parent, filePath) ?: return null
         val opened = OpenedSpace(
             space = space,
             fileSystem = fileSystem,
+            favorites = favorites,
             initialFile = FilePath(relative),
         )
         openedSpace.value = opened

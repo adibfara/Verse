@@ -52,6 +52,9 @@ class ExplorerViewModel(
     private val fileSystem: SpaceFileSystem?
         get() = spaceRepository.current.value?.fileSystem
 
+    private val favorites
+        get() = spaceRepository.current.value?.favorites
+
     init {
         viewModelScope.launch {
             spaceRepository.current.collect { opened ->
@@ -77,6 +80,9 @@ class ExplorerViewModel(
                     if (mutableState.value.layoutMode == ExplorerLayoutMode.DualPane) {
                         loadDualPaneFolders()
                         session.dualPaneSelectedFolder?.let { selectDualPaneFolder(it) }
+                    }
+                    if (mutableState.value.favoritesFilterEnabled) {
+                        refreshFavoritedPaths()
                     }
                 }
             }
@@ -154,6 +160,14 @@ class ExplorerViewModel(
         val enabled = !mutableState.value.favoritesFilterEnabled
         mutableState.value = mutableState.value.copy(favoritesFilterEnabled = enabled)
         sessionRepository.update { it.copy(favoritesFilterEnabled = enabled) }
+        if (enabled) refreshFavoritedPaths()
+    }
+
+    private fun refreshFavoritedPaths() {
+        viewModelScope.launch {
+            val paths = favorites?.favoritedPaths() ?: emptySet()
+            mutableState.value = mutableState.value.copy(favoritedPaths = paths)
+        }
     }
 
     private fun toggleLayoutMode() {
@@ -449,6 +463,7 @@ class ExplorerViewModel(
         val rows = mutableListOf<TreeRow>()
         appendRows(FilePath.Root, 0, order, rows)
         mutableState.value = mutableState.value.copy(rows = rows)
+        if (mutableState.value.favoritesFilterEnabled) refreshFavoritedPaths()
     }
 
     private fun appendRows(

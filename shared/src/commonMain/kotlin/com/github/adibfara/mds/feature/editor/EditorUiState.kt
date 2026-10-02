@@ -18,6 +18,7 @@ data class EditorUiState(
     val absolutePath: String = "",
     val isLoading: Boolean = false,
     val isDirty: Boolean = false,
+    val isFavorite: Boolean = false,
     val errorMessage: String? = null,
 ) {
     val hasFile: Boolean get() = path != null
@@ -36,4 +37,10 @@ sealed interface EditorEvent {
     data class Renamed(val from: FilePath, val to: FilePath) : EditorEvent
     data object DismissError : EditorEvent
     data object ClearActive : EditorEvent
+    data object ToggleFavorite : EditorEvent
+    data class RequestRename(val name: String) : EditorEvent
+}
+
+sealed interface EditorAction {
+    data class Renamed(val from: FilePath, val to: FilePath) : EditorAction
 }

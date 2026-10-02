@@ -17,6 +17,8 @@ import com.github.adibfara.mds.core.model.EditorMode
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.persistence.SettingsStore
+import com.github.adibfara.mds.feature.explorer.usecase.NameValidation
+import com.github.adibfara.mds.feature.explorer.usecase.validateName
 import com.github.adibfara.mds.feature.space.SpaceRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +39,7 @@ private class EditorSession(
     var document: MdDocument,
     var savedText: String,
     var isLoaded: Boolean,
+    var isFavorite: Boolean = false,
 ) {
     val isDirty: Boolean get() = value.text != savedText
 }
@@ -58,6 +61,9 @@ class EditorViewModel(
 
     private val mutableDirtyChanges = MutableSharedFlow<DirtyChange>(extraBufferCapacity = 32)
     val dirtyChanges: SharedFlow<DirtyChange> = mutableDirtyChanges.asSharedFlow()
+
+    private val mutableActions = MutableSharedFlow<EditorAction>(extraBufferCapacity = 8)
+    val actions: SharedFlow<EditorAction> = mutableActions.asSharedFlow()
 
     private val parseDebouncer = Debouncer(viewModelScope, ParseDebounceMillis)
     private val saveDebouncer = Debouncer(
@@ -81,6 +87,59 @@ class EditorViewModel(
                 mutableState.value.copy(errorMessage = null)
 
             EditorEvent.ClearActive -> clearActive()
+            EditorEvent.ToggleFavorite -> toggleFavorite()
+            is EditorEvent.RequestRename -> renameActiveFile(event.name)
+        }
+    }
+
+    private fun renameActiveFile(newName: String) {
+        val session = activeSession() ?: return
+        val validation = validateName(newName)
+        if (validation is NameValidation.Invalid) {
+            mutableState.value = mutableState.value.copy(errorMessage = validation.reason)
+            return
+        }
+        val trimmed = newName.trim()
+        val extension = session.path.extension
+        val finalName = if (trimmed.contains('.') || extension.isEmpty()) trimmed else "$trimmed.$extension"
+        if (finalName == session.path.name) return
+
+        viewModelScope.launch {
+            val fileSystem = spaceRepository.current.value?.fileSystem ?: return@launch
+            val from = session.path
+            val renamed = runCatching { fileSystem.rename(from, finalName) }.getOrElse { failure ->
+                mutableState.value = mutableState.value.copy(
+                    errorMessage = failure.message ?: "Could not rename this file",
+                )
+                return@launch
+            }
+            sessions.remove(from)
+            val updated = EditorSession(
+                path = renamed,
+                kind = FileKind.fromExtension(renamed.extension),
+                value = session.value,
+                mode = session.mode,
+                document = session.document,
+                savedText = session.savedText,
+                isLoaded = session.isLoaded,
+                isFavorite = session.isFavorite,
+            )
+            sessions[renamed] = updated
+            if (activePath == from) {
+                activePath = renamed
+                publish(updated)
+            }
+            mutableActions.tryEmit(EditorAction.Renamed(from, renamed))
+        }
+    }
+
+    private fun toggleFavorite() {
+        val session = activeSession() ?: return
+        val favorites = spaceRepository.current.value?.favorites ?: return
+        viewModelScope.launch {
+            val isFavorite = favorites.toggleFavorite(session.path)
+            session.isFavorite = isFavorite
+            if (activePath == session.path) publish(session)
         }
     }
 
@@ -132,6 +191,7 @@ class EditorViewModel(
             } else {
                 MdDocument.Empty.copy(text = text, stats = computeStats(text))
             }
+            session.isFavorite = spaceRepository.current.value?.favorites?.isFavorite(path) ?: false
             if (activePath == path) publish(session)
         }
     }
@@ -250,6 +310,7 @@ class EditorViewModel(
             document = session.document,
             savedText = session.savedText,
             isLoaded = session.isLoaded,
+            isFavorite = session.isFavorite,
         )
         sessions[to] = moved
         if (activePath == from) {
@@ -297,6 +358,7 @@ class EditorViewModel(
             absolutePath = fileSystem?.absolutePathOf(session.path).orEmpty(),
             isLoading = !session.isLoaded,
             isDirty = session.isDirty,
+            isFavorite = session.isFavorite,
         )
     }
 
