@@ -57,9 +57,9 @@ fun SettingsPanel(
                 OptionRow(
                     label = "Default mode",
                     options = listOf(
-                        EditorMode.Live to "Editable preview",
+                        EditorMode.Preview to "Rendered",
+                        EditorMode.Live to "Markers on cursor line",
                         EditorMode.Raw to "Raw markdown",
-                        EditorMode.Preview to "Read only",
                     ),
                     selected = settings.defaultEditorMode,
                     onSelect = { mode -> onSettingsChange { it.copy(defaultEditorMode = mode) } },

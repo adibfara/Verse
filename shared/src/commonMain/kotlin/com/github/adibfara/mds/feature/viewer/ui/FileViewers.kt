@@ -22,11 +22,10 @@ import com.github.adibfara.mds.core.designsystem.component.MdsIcon
 import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MdsText
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
-import com.github.adibfara.mds.feature.editor.ui.preview.LocalMarkdownImageLoader
 
 @Composable
 fun ImageViewer(target: String, modifier: Modifier = Modifier) {
-    val loader = LocalMarkdownImageLoader.current
+    val loader = LocalSpaceImageLoader.current
     var bitmap by remember(target) { mutableStateOf<ImageBitmap?>(null) }
 
     LaunchedEffect(target, loader) {

@@ -20,33 +20,92 @@ class MarkdownParser {
         val collector = StyleCollector(text)
         collector.visit(tree)
         val tasks = findTaskMarkers(text)
-        val taskStyles = tasks.map { StyledRange(it.range, StyleKind.TaskMarker) }
-        val styles = (collector.styles + taskStyles).sortedBy { it.range.start }
+        val styles = (collector.styles + taskStyles(text, tasks)).sortedBy { it.range.start }
         return MdDocument(
             text = text,
             blocks = blocks,
             styles = styles,
             markers = collector.markers.sortedBy { it.start },
             decorations = buildDecorations(text, styles, tasks),
+            tasks = tasks,
+            links = collector.links,
             stats = computeStats(text),
         )
     }
 }
 
-internal data class TaskMarker(val range: MdRange, val checked: Boolean)
-
 private const val BulletGlyph = "•"
-private const val UncheckedGlyph = "☐"
-private const val CheckedGlyph = "☑"
+private val TaskBoxReplacement = TaskBoxPlaceholder.toString()
+
+private fun taskStyles(text: String, tasks: List<MdTask>): List<StyledRange> =
+    tasks.flatMap { task ->
+        if (!task.checked) {
+            listOf(StyledRange(task.range, StyleKind.TaskMarker))
+        } else {
+            val textStart = skipSpacesFrom(text, task.range.end)
+            val lineEnd = lineEndFrom(text, textStart)
+            listOf(StyledRange(task.range, StyleKind.TaskMarkerDone)) +
+                if (lineEnd > textStart) {
+                    listOf(StyledRange(MdRange(textStart, lineEnd), StyleKind.TaskText))
+                } else {
+                    emptyList()
+                }
+        }
+    }
+
+fun documentWithTaskToggled(
+    document: MdDocument,
+    text: String,
+    range: MdRange,
+    checked: Boolean,
+): MdDocument {
+    if (document.tasks.none { it.range == range }) return document
+    val lineEnd = lineEndFrom(text, range.end)
+    val kept = document.styles.filterNot { styled ->
+        val isMarker = styled.range == range &&
+            (styled.kind == StyleKind.TaskMarker || styled.kind == StyleKind.TaskMarkerDone)
+        val isOwnText = styled.kind == StyleKind.TaskText &&
+            styled.range.start >= range.end &&
+            styled.range.end <= lineEnd
+        isMarker || isOwnText
+    }
+    val toggled = MdTask(range, checked)
+    return document.copy(
+        text = text,
+        styles = (kept + taskStyles(text, listOf(toggled))).sortedBy { it.range.start },
+        tasks = document.tasks.map { if (it.range == range) toggled else it },
+        stats = computeStats(text),
+    )
+}
+
+private fun skipSpacesFrom(text: String, start: Int): Int {
+    var index = start.coerceIn(0, text.length)
+    while (index < text.length && (text[index] == ' ' || text[index] == '	')) index++
+    return index
+}
+
+private fun lineEndFrom(text: String, start: Int): Int {
+    var index = start.coerceIn(0, text.length)
+    while (index < text.length && text[index] != '\n') index++
+    return index
+}
 
 private fun buildDecorations(
     text: String,
     styles: List<StyledRange>,
-    tasks: List<TaskMarker>,
+    tasks: List<MdTask>,
 ): List<MaskEdit> {
     val decorations = mutableListOf<MaskEdit>()
 
     styles.filter { it.kind == StyleKind.ListMarker }.forEach { styled ->
+        val owningTask = tasks.firstOrNull { task ->
+            task.range.start >= styled.range.end &&
+                text.substring(styled.range.end, task.range.start).isBlank()
+        }
+        if (owningTask != null) {
+            decorations.add(MaskEdit(MdRange(styled.range.start, owningTask.range.start), ""))
+            return@forEach
+        }
         val raw = text.substring(styled.range.start, styled.range.end)
         if (raw.isNotEmpty() && (raw[0] == '-' || raw[0] == '*' || raw[0] == '+')) {
             decorations.add(MaskEdit(styled.range, BulletGlyph + raw.drop(1)))
@@ -54,15 +113,13 @@ private fun buildDecorations(
     }
 
     tasks.forEach { task ->
-        decorations.add(
-            MaskEdit(task.range, if (task.checked) CheckedGlyph else UncheckedGlyph),
-        )
+        decorations.add(MaskEdit(task.range, TaskBoxReplacement))
     }
 
     return decorations
 }
 
-internal fun findTaskMarkerInLine(text: String, lineStart: Int, lineEnd: Int): TaskMarker? {
+internal fun findTaskMarkerInLine(text: String, lineStart: Int, lineEnd: Int): MdTask? {
     var index = lineStart
     while (index < lineEnd && (text[index] == ' ' || text[index] == '	')) index++
 
@@ -83,11 +140,11 @@ internal fun findTaskMarkerInLine(text: String, lineStart: Int, lineEnd: Int): T
     if (text[index] != '[' || text[index + 2] != ']') return null
     val marker = text[index + 1]
     if (marker != ' ' && marker != 'x' && marker != 'X') return null
-    return TaskMarker(MdRange(index, index + 3), checked = marker != ' ')
+    return MdTask(MdRange(index, index + 3), checked = marker != ' ')
 }
 
-internal fun findTaskMarkers(text: String): List<TaskMarker> {
-    val markers = mutableListOf<TaskMarker>()
+internal fun findTaskMarkers(text: String): List<MdTask> {
+    val markers = mutableListOf<MdTask>()
     var lineStart = 0
     while (lineStart <= text.length) {
         var lineEnd = lineStart
@@ -355,8 +412,9 @@ private class StyleCollector(private val source: String) {
 
     val styles = mutableListOf<StyledRange>()
     val markers = mutableListOf<MdRange>()
+    val links = mutableListOf<MdLink>()
 
-    fun visit(node: ASTNode) {
+    fun visit(node: ASTNode, withinImage: Boolean = false) {
         HeadingTypes[node.type]?.let { level ->
             styles.add(StyledRange(node.range(), StyleKind.heading(level)))
             node.firstChildOfType(MarkdownTokenTypes.ATX_HEADER)?.let { header ->
@@ -410,9 +468,12 @@ private class StyleCollector(private val source: String) {
 
             MarkdownElementTypes.INLINE_LINK,
             MarkdownElementTypes.IMAGE,
-            -> if (node.descendantOfType(MarkdownElementTypes.LINK_DESTINATION) != null) {
+            -> node.descendantOfType(MarkdownElementTypes.LINK_DESTINATION)?.let { destination ->
                 styles.add(StyledRange(node.range(), StyleKind.Link))
                 markLinkPunctuation(node)
+                if (node.type == MarkdownElementTypes.INLINE_LINK && !withinImage) {
+                    links.add(MdLink(node.range(), destination.textIn(source).trim('<', '>')))
+                }
             }
 
             MarkdownTokenTypes.BLOCK_QUOTE -> markers.add(node.range())
@@ -424,7 +485,8 @@ private class StyleCollector(private val source: String) {
             else -> Unit
         }
 
-        node.children.forEach(::visit)
+        val descendingIntoImage = withinImage || node.type == MarkdownElementTypes.IMAGE
+        node.children.forEach { child -> visit(child, descendingIntoImage) }
     }
 
     private fun markEmphasisTokens(node: ASTNode) {

@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
+import com.github.adibfara.mds.core.markdown.FormatAction
+import com.github.adibfara.mds.core.markdown.MdRange
 import com.github.adibfara.mds.core.designsystem.component.MdsDivider
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.model.EditorMode
@@ -29,6 +31,7 @@ fun EditorPane(
     onEvent: (EditorEvent) -> Unit,
     onOpenInDefaultApplication: () -> Unit,
     onRevealInFileManager: () -> Unit,
+    onOpenLink: (String) -> Unit,
     showStatusBar: Boolean,
     modifier: Modifier = Modifier,
 ) {
@@ -55,7 +58,7 @@ fun EditorPane(
                     onRevealInFileManager = onRevealInFileManager,
                 )
 
-                else -> EditorContent(state = state, onEvent = onEvent)
+                else -> EditorContent(state = state, onEvent = onEvent, onOpenLink = onOpenLink)
             }
         }
 
@@ -67,49 +70,50 @@ fun EditorPane(
 }
 
 @Composable
-private fun EditorContent(state: EditorUiState, onEvent: (EditorEvent) -> Unit) {
-    val listState = rememberLazyListState()
+private fun EditorContent(
+    state: EditorUiState,
+    onEvent: (EditorEvent) -> Unit,
+    onOpenLink: (String) -> Unit,
+) {
     val scrollState = rememberScrollState()
-    val columnModifier = Modifier
-        .widthIn(max = MdsTheme.sizes.editorMaxWidth)
-        .fillMaxSize()
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        when (state.mode) {
-            EditorMode.Preview -> MarkdownPreview(
-                document = state.document,
-                listState = listState,
-                onToggleTask = { range, checked ->
-                    onEvent(EditorEvent.ToggleTask(range, checked))
-                },
-                onOpenImage = {},
-                modifier = columnModifier.padding(
-                    horizontal = MdsTheme.spacing.xl,
-                    vertical = MdsTheme.spacing.lg,
-                ),
-            )
-
-            EditorMode.Raw -> Column(
-                modifier = columnModifier
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = MdsTheme.spacing.xl, vertical = MdsTheme.spacing.lg),
-            ) {
-                RawMarkdownField(
-                    value = state.value,
-                    onValueChange = { onEvent(EditorEvent.TextChanged(it)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+        Column(
+            modifier = Modifier
+                .widthIn(max = MdsTheme.sizes.editorMaxWidth)
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(horizontal = MdsTheme.spacing.xl, vertical = MdsTheme.spacing.lg),
+        ) {
+            val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
+            val onToggleTask: (MdRange, Boolean) -> Unit = { range, checked ->
+                onEvent(EditorEvent.ToggleTask(range, checked))
             }
-
-            EditorMode.Live -> Column(
-                modifier = columnModifier
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = MdsTheme.spacing.xl, vertical = MdsTheme.spacing.lg),
-            ) {
-                LiveMarkdownField(
+            val onFormat: (FormatAction) -> Unit = { onEvent(EditorEvent.ApplyFormat(it)) }
+            when (state.mode) {
+                EditorMode.Preview -> RenderedMarkdownField(
                     value = state.value,
                     document = state.document,
-                    onValueChange = { onEvent(EditorEvent.TextChanged(it)) },
+                    onValueChange = onValueChange,
+                    onToggleTask = onToggleTask,
+                    onOpenLink = onOpenLink,
+                    onFormat = onFormat,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                EditorMode.Live -> LiveMarkdownField(
+                    value = state.value,
+                    document = state.document,
+                    onValueChange = onValueChange,
+                    onToggleTask = onToggleTask,
+                    onOpenLink = onOpenLink,
+                    onFormat = onFormat,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                EditorMode.Raw -> RawMarkdownField(
+                    value = state.value,
+                    onValueChange = onValueChange,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

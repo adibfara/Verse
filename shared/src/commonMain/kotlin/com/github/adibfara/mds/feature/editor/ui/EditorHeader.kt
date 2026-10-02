@@ -35,6 +35,12 @@ fun EditorHeader(
         Breadcrumb(segments = breadcrumb, isDirty = isDirty, modifier = Modifier.weight(1f))
 
         MdsIconButton(
+            icon = MdsIcons.Eye,
+            contentDescription = "Rendered editing mode",
+            onClick = { onModeChange(EditorMode.Preview) },
+            selected = mode == EditorMode.Preview,
+        )
+        MdsIconButton(
             icon = MdsIcons.Pencil,
             contentDescription = "Live editing mode",
             onClick = { onModeChange(EditorMode.Live) },
@@ -45,12 +51,6 @@ fun EditorHeader(
             contentDescription = "Raw markdown mode",
             onClick = { onModeChange(EditorMode.Raw) },
             selected = mode == EditorMode.Raw,
-        )
-        MdsIconButton(
-            icon = MdsIcons.Eye,
-            contentDescription = "Preview mode",
-            onClick = { onModeChange(EditorMode.Preview) },
-            selected = mode == EditorMode.Preview,
         )
         MdsIconButton(
             icon = MdsIcons.ExternalLink,

@@ -64,18 +64,35 @@ Directories are listed **only when expanded**; there is never a recursive walk a
 
 `MarkdownParser` wraps `org.jetbrains:markdown` (GFM flavour) and produces one `MdDocument` that feeds all three editor modes:
 
-- `blocks` — our own `MdBlock`/`MdInline` tree with source offsets, used by read-only Preview.
+- `blocks` — our own `MdBlock`/`MdInline` tree with source offsets. No UI consumes it today (the read-only renderers were deleted when Preview became editable); it stays because it is the parser's structural output, is covered by `MarkdownParserTest`, and is what a future block-based editor would read.
 - `styles` — flat `StyledRange`s (headings, bold, link, …) applied as `SpanStyle`s.
 - `markers` — syntax characters to hide (`#`, `**`, backticks, `>`).
-- `decorations` — `MaskEdit` *replacements* (`- ` → `• `, `[ ]` → `☐`, `[x]` → `☑`).
+- `decorations` — `MaskEdit` *replacements*: `- ` → `• `, and a checkbox → `TaskBoxPlaceholder` (U+2003 EM SPACE). A task item's bullet is **hidden rather than bulleted**, so `- [ ] x` renders as one box then `x`, not `• ☐ x`.
+- `tasks` / `links` — source ranges of checkbox markers and of inline links with their targets. These are what make the glyphs and links clickable in an editable field; links nested inside an `IMAGE` node are excluded, or every image would also register as a link.
 
-`buildMaskedText(text, edits, revealedLine)` in `MarkerMask.kt` applies hides and replacements and builds two `IntArray`s for `OffsetMapping`. **This is the crash-prone core of the app.** Its invariants (monotonic, in-bounds, round-tripping for non-replaced offsets) are locked down by property tests in `MarkerMaskTest` / `MaskReplacementTest` that sweep every caret position over a document corpus. Do not weaken those tests to make a change pass.
+`buildMaskedText(text, edits, revealedLine)` in `MarkerMask.kt` applies hides and replacements and builds two `IntArray`s for `OffsetMapping`. **This is the crash-prone core of the app.** Its invariants (monotonic, in-bounds, round-tripping for non-replaced offsets) are locked down by property tests in `MarkerMaskTest` / `MaskReplacementTest` / `RenderedMaskTest` that sweep every caret position over a document corpus. Do not weaken those tests to make a change pass.
 
-Markers on the caret's current line are revealed (Obsidian behaviour), so the transformation is a pure function of `(document, caretLine)` and is cached on that key.
+`maskEditsFor(document)` in `MaskEdits.kt` builds the edit list and is where the **empty-construct rule** lives: a marker is only hidden when its construct actually has visible content. `# Hi` renders as `Hi`; backspace to `# ` and the `# ` comes back, so a half-typed construct is never invisible. Content is measured by walking the construct's style range and skipping its own markers.
 
-Editor modes: `Live` (default — editable **and** styled; this is the product's whole point), `Raw` (plain monospace, no styling at all, by explicit user requirement), `Preview` (read-only composables with clickable checkboxes and images).
+Editor modes (all three are editable):
 
-Known limit: a single text field cannot host interactive widgets, so in `Live` mode checkboxes are glyphs rather than clickable, and inline images do not render. Closing that gap requires a block-based editor (one composable per block), which is a deliberate non-goal of the current design.
+- `Preview` — the default, and first in the toolbar. Markers are always hidden, so it reads as rendered markdown you can type into.
+- `Live` — same, except markers on the caret's current line are revealed (Obsidian behaviour), so the transformation is a pure function of `(document, caretLine)` and is cached on that key.
+- `Raw` — plain monospace, no styling at all, by explicit user requirement.
+
+Parsing is debounced 80 ms, so the document usually lags the text field by a keystroke or two. `MarkdownVisualTransformation` therefore projects the stale document forward through `textRevisionBetween(before, after)` (`TextRevision.kt`): marker edits `shift` (dropped when the edit touches them) and styles `stretch` (grown when the edit lands inside). Without this the whole document's markers flash back on every keystroke. Do not replace it with an identity fallback.
+
+Checkboxes are **drawn, not typed**. `[ ]` and `[x]` are both replaced by the same blank em-space placeholder, and `drawTaskBoxes` paints a rounded box into that glyph's bounding box (centred on the line's baseline, not the line box, or it rides high). Do not go back to `☐`/`☑` glyphs: their advance widths differ, so toggling reflowed the row, and Windows re-resolved the font fallback for the whole run, which visibly changed *other* lines' checkmarks. One placeholder for both states is what makes a toggle cost zero layout — `openAndDoneTasksReserveIdenticalWidth` pins it.
+
+Checkboxes and links **are** clickable, even though the editor is one text field: `MarkdownFields.kt` hit-tests taps against the transformed `TextLayoutResult` on `PointerEventPass.Initial` and consumes the gesture before the field places a caret. A checkbox is matched by the glyph's bounding box, a link by offset range. Everything else falls through to normal caret placement. The same hit-test drives `pointerHoverIcon`, which needs `overrideDescendants = true` to beat the field's own I-beam — and must go back to false off-target, or the whole editor loses the I-beam.
+
+A link target is opened by `rememberLinkOpener` in `WorkspaceHost.kt`: `http(s)`/`mailto` go to `SystemOpener.openUrl`, **not** `openInDefaultApplication` — that one stats the string as a `File` and silently returns for a URL. Anything else resolves against the space (relative to the active note first, then from the root, trying `target` then `target.md`) and opens as a tab. A relative target that resolves to nothing does nothing at all today.
+
+Toggling a checkbox goes through `documentWithTaskToggled`, which rewrites the parsed document in place rather than waiting for the debounced re-parse. `[ ]` → `[x]` is length-preserving, so every other range stays valid and only the task's own styles change. Without it the edit lands *inside* the checkbox's own decoration range, the projection drops that decoration as touched, and the literal `[x]` flashes on screen for 80 ms. `togglingATaskMatchesAFullReparse` asserts the shortcut equals a real parse.
+
+Up/Down arrows are also handled there (`verticalCaretKeys`) instead of by Compose. The built-in vertical movement was reported stuck on heading lines — pressing Down did nothing — which is the shape of trouble you get driving it through a lossy `OffsetMapping` and mixed font sizes. Rather than depend on its internals, ours maps the caret into transformed space, picks the neighbouring line off the layout, and maps the hit offset back, keeping a goal column so repeated presses do not drift when crossing a large heading. Shift/Ctrl/Alt arrows still fall through to the default.
+
+Known limit: a text field still cannot host real widgets, so inline images do not render in any mode. Closing that gap requires a block-based editor (one composable per block), which is a deliberate non-goal of the current design.
 
 Task markers are detected by **scanning the source line** (`findTaskMarkerInLine`), not by trusting the parser's `CHECK_BOX` token — the upstream parser classifies `[x]` at the start of some list items as a shortcut reference link instead. Relatedly, link punctuation is only hidden for links that actually have a `LINK_DESTINATION`; reference-style links render as plain text so an undefined `[x]` can never be mangled.
 

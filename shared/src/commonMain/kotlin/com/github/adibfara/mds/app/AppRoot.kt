@@ -20,14 +20,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.adibfara.mds.app.ui.DesktopShell
 import com.github.adibfara.mds.app.ui.MobileShell
 import com.github.adibfara.mds.app.ui.WorkspaceEffects
-import com.github.adibfara.mds.app.ui.rememberMarkdownImageLoader
+import com.github.adibfara.mds.app.ui.rememberLinkOpener
+import com.github.adibfara.mds.app.ui.rememberSpaceImageLoader
 import com.github.adibfara.mds.core.command.CommandId
 import com.github.adibfara.mds.core.command.CommandRegistry
 import com.github.adibfara.mds.core.command.Commands
 import com.github.adibfara.mds.core.command.commandShortcuts
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.designsystem.theme.resolveTheme
-import com.github.adibfara.mds.core.model.EditorMode
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.platform.LocationResolver
 import com.github.adibfara.mds.core.platform.PlatformKind
@@ -35,7 +35,7 @@ import com.github.adibfara.mds.core.platform.SystemOpener
 import com.github.adibfara.mds.core.platform.currentPlatformKind
 import com.github.adibfara.mds.feature.editor.EditorEvent
 import com.github.adibfara.mds.feature.editor.EditorViewModel
-import com.github.adibfara.mds.feature.editor.ui.preview.LocalMarkdownImageLoader
+import com.github.adibfara.mds.feature.viewer.ui.LocalSpaceImageLoader
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerViewModel
 import com.github.adibfara.mds.feature.settings.ui.SettingsPanel
@@ -121,7 +121,13 @@ private fun WorkspaceScreen(
 
     val clipboard = LocalClipboardManager.current
     val focusRequester = remember { FocusRequester() }
-    val imageLoader = rememberMarkdownImageLoader(spaceRepository, editorState.path)
+    val imageLoader = rememberSpaceImageLoader(spaceRepository, editorState.path)
+    val openLink = rememberLinkOpener(
+        spaceRepository = spaceRepository,
+        activeFile = editorState.path,
+        onOpenPath = { tabsViewModel.onEvent(TabsEvent.OpenPath(it)) },
+        onOpenExternal = { systemOpener.openUrl(it) },
+    )
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -182,7 +188,7 @@ private fun WorkspaceScreen(
         }
     }
 
-    CompositionLocalProvider(LocalMarkdownImageLoader provides imageLoader) {
+    CompositionLocalProvider(LocalSpaceImageLoader provides imageLoader) {
         val shellModifier = Modifier
             .fillMaxSize()
             .focusRequester(focusRequester)
@@ -211,6 +217,7 @@ private fun WorkspaceScreen(
                 onRevealInFileManager = {
                     editorState.path?.let { systemOpener.revealInFileManager(absolutePathOf(it)) }
                 },
+                onOpenLink = openLink,
                 onCopyPath = { clipboard.setText(AnnotatedString(it)) },
                 absolutePathOf = absolutePathOf,
                 modifier = shellModifier,
@@ -250,6 +257,7 @@ private fun WorkspaceScreen(
                 onOpenInDefaultApplication = {
                     editorState.path?.let { systemOpener.openInDefaultApplication(absolutePathOf(it)) }
                 },
+                onOpenLink = openLink,
                 modifier = shellModifier,
             )
         }

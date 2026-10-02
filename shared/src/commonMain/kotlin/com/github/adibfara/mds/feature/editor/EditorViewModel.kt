@@ -6,10 +6,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.adibfara.mds.core.common.Debouncer
 import com.github.adibfara.mds.core.common.DispatcherProvider
+import com.github.adibfara.mds.core.markdown.FormatAction
 import com.github.adibfara.mds.core.markdown.MarkdownParser
 import com.github.adibfara.mds.core.markdown.MdDocument
 import com.github.adibfara.mds.core.markdown.MdRange
+import com.github.adibfara.mds.core.markdown.applyFormatAction
 import com.github.adibfara.mds.core.markdown.computeStats
+import com.github.adibfara.mds.core.markdown.documentWithTaskToggled
 import com.github.adibfara.mds.core.model.EditorMode
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.core.model.FilePath
@@ -72,6 +75,7 @@ class EditorViewModel(
             EditorEvent.ToggleRawMode -> toggleRawMode()
             EditorEvent.Save -> viewModelScope.launch { flushAll() }
             is EditorEvent.ToggleTask -> toggleTask(event.range, event.checked)
+            is EditorEvent.ApplyFormat -> applyFormat(event.action)
             is EditorEvent.Renamed -> renamed(event.from, event.to)
             EditorEvent.DismissError -> mutableState.value =
                 mutableState.value.copy(errorMessage = null)
@@ -201,11 +205,21 @@ class EditorViewModel(
         val text = session.value.text
         if (range.start < 0 || range.end > text.length) return
         val replacement = if (checked) "[x]" else "[ ]"
+        if (text.substring(range.start, range.end) == replacement) return
         val updated = text.replaceRange(range.start, range.end, replacement)
+        session.document = documentWithTaskToggled(session.document, updated, range, checked)
+        textChanged(session.value.copy(text = updated))
+    }
+
+    private fun applyFormat(action: FormatAction) {
+        val session = activeSession() ?: return
+        if (session.kind != FileKind.Markdown) return
+        val edit = applyFormatAction(session.value.text, action)
+        if (edit.text == session.value.text) return
         textChanged(
-            session.value.copy(
-                text = updated,
-                selection = TextRange(range.start + replacement.length),
+            TextFieldValue(
+                text = edit.text,
+                selection = TextRange(edit.selection.start, edit.selection.end),
             ),
         )
     }

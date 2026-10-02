@@ -52,6 +52,7 @@ fun DesktopShell(
     onOpenQuickOpen: () -> Unit,
     onOpenInDefaultApplication: () -> Unit,
     onRevealInFileManager: () -> Unit,
+    onOpenLink: (String) -> Unit,
     onCopyPath: (String) -> Unit,
     absolutePathOf: (com.github.adibfara.mds.core.model.FilePath) -> String,
     modifier: Modifier = Modifier,
@@ -87,6 +88,7 @@ fun DesktopShell(
                     onEvent = onEditorEvent,
                     onOpenInDefaultApplication = onOpenInDefaultApplication,
                     onRevealInFileManager = onRevealInFileManager,
+                    onOpenLink = onOpenLink,
                     showStatusBar = appState.settings.showStatusBar,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )

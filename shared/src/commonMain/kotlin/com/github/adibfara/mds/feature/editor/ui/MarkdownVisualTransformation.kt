@@ -6,41 +6,27 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import com.github.adibfara.mds.core.markdown.MarkerMask
-import com.github.adibfara.mds.core.markdown.MdDocument
-import com.github.adibfara.mds.core.markdown.MdRange
-import com.github.adibfara.mds.core.markdown.MaskEdit
-import com.github.adibfara.mds.core.markdown.buildMaskedText
+import com.github.adibfara.mds.core.markdown.MaskedDocument
 
 class MarkdownVisualTransformation(
-    private val document: MdDocument,
-    private val revealedLine: MdRange?,
+    private val masked: MaskedDocument,
     private val styles: MarkdownStyles,
 ) : VisualTransformation {
 
-    private var cachedSource: String? = null
-    private var cachedResult: TransformedText? = null
+    private val transformed: TransformedText by lazy { build() }
 
     override fun filter(text: AnnotatedString): TransformedText {
-        cachedResult?.takeIf { cachedSource == text.text }?.let { return it }
-
-        val result = if (document.text != text.text) {
-            TransformedText(AnnotatedString(text.text), OffsetMapping.Identity)
-        } else {
-            transform(text.text)
+        if (text.text != masked.mask.originalText) {
+            return TransformedText(AnnotatedString(text.text), OffsetMapping.Identity)
         }
-        cachedSource = text.text
-        cachedResult = result
-        return result
+        return transformed
     }
 
-    private fun transform(source: String): TransformedText {
-        val edits = document.markers.map { MaskEdit(it, "") } + document.decorations
-        val mask = buildMaskedText(source, edits, revealedLine)
-        val transformed = mask.transformedText
-
+    private fun build(): TransformedText {
+        val mask = masked.mask
         val annotated = buildAnnotatedString {
-            append(transformed)
-            document.styles.forEach { styled ->
+            append(mask.transformedText)
+            masked.styles.forEach { styled ->
                 val start = mask.originalToTransformed(styled.range.start)
                 val end = mask.originalToTransformed(styled.range.end)
                 if (end > start) {
@@ -48,7 +34,6 @@ class MarkdownVisualTransformation(
                 }
             }
         }
-
         return TransformedText(annotated, MaskOffsetMapping(mask))
     }
 }

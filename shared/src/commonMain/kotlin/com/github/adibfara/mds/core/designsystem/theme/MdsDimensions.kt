@@ -32,6 +32,7 @@ data class MdsSizes(
     val icon: Dp = 16.dp,
     val iconLarge: Dp = 20.dp,
     val iconButton: Dp = 26.dp,
+    val iconButtonSmall: Dp = 22.dp,
     val rowHeight: Dp = 26.dp,
     val tabHeight: Dp = 32.dp,
     val toolbarHeight: Dp = 38.dp,

@@ -29,7 +29,7 @@ data class AppSettings(
     val startupBehavior: StartupBehavior = StartupBehavior.RestoreSession,
     val startupFilePath: String? = null,
     val editorFontSize: Float = 15.5f,
-    val defaultEditorMode: EditorMode = EditorMode.Live,
+    val defaultEditorMode: EditorMode = EditorMode.Preview,
     val sortOrder: SortOrder = SortOrder.NameAscending,
     val autoSaveDelayMillis: Long = 800L,
     val showStatusBar: Boolean = true,

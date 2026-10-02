@@ -1,6 +1,7 @@
 package com.github.adibfara.mds.feature.editor
 
 import androidx.compose.ui.text.input.TextFieldValue
+import com.github.adibfara.mds.core.markdown.FormatAction
 import com.github.adibfara.mds.core.markdown.MdDocument
 import com.github.adibfara.mds.core.markdown.MdRange
 import com.github.adibfara.mds.core.model.EditorMode
@@ -31,6 +32,7 @@ sealed interface EditorEvent {
     data object ToggleRawMode : EditorEvent
     data object Save : EditorEvent
     data class ToggleTask(val range: MdRange, val checked: Boolean) : EditorEvent
+    data class ApplyFormat(val action: FormatAction) : EditorEvent
     data class Renamed(val from: FilePath, val to: FilePath) : EditorEvent
     data object DismissError : EditorEvent
     data object ClearActive : EditorEvent

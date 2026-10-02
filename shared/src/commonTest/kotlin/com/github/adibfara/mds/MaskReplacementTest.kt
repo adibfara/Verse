@@ -1,6 +1,7 @@
 package com.github.adibfara.mds
 
 import com.github.adibfara.mds.core.markdown.MarkdownParser
+import com.github.adibfara.mds.core.markdown.TaskBoxPlaceholder
 import com.github.adibfara.mds.core.markdown.MaskEdit
 import com.github.adibfara.mds.core.markdown.buildMaskedText
 import com.github.adibfara.mds.core.markdown.lineRangeAt
@@ -32,10 +33,33 @@ class MaskReplacementTest {
             )
         }
 
+    private val box = TaskBoxPlaceholder
+
     @Test
     fun bulletsBecomeGlyphsAndCheckboxesBecomeBoxes() {
         val masked = maskedWith("- bullet\n- [ ] open\n- [x] done\n", null)
-        assertEquals("• bullet\n• ☐ open\n• ☑ done\n", masked.transformedText)
+        assertEquals("• bullet\n$box open\n$box done\n", masked.transformedText)
+    }
+
+    @Test
+    fun taskItemsDropTheBulletBehindTheCheckbox() {
+        val masked = maskedWith("- [ ] open\n", null)
+        assertEquals("$box open\n", masked.transformedText)
+    }
+
+    @Test
+    fun openAndDoneTasksReserveIdenticalWidth() {
+        val open = maskedWith("- [ ] same\n", null).transformedText
+        val done = maskedWith("- [x] same\n", null).transformedText
+        assertEquals(open, done, "toggling a task must not reflow its line")
+    }
+
+    @Test
+    fun indentedTaskItemsKeepTheirIndentation() {
+        val masked = maskedWith("- parent\n    - [x] child\n", null)
+        val childLine = masked.transformedText.lines()[1]
+        assertTrue(childLine.startsWith(" "), "indentation was dropped: \"$childLine\"")
+        assertEquals("$box child", childLine.dropWhile { it == ' ' })
     }
 
     @Test
@@ -49,7 +73,7 @@ class MaskReplacementTest {
         val text = "- [ ] open\n- [x] done\n"
         val masked = maskedWith(text, lineRangeAt(text, 2))
         assertTrue(masked.transformedText.startsWith("- [ ] open"))
-        assertTrue(masked.transformedText.contains("• ☑ done"))
+        assertTrue(masked.transformedText.contains("$box done"))
     }
 
     @Test

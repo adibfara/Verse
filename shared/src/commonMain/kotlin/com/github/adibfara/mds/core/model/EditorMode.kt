@@ -4,9 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class EditorMode {
+    Preview,
     Live,
     Raw,
-    Preview;
-
-    val isEditable: Boolean get() = this != Preview
 }

@@ -55,9 +55,11 @@ class MarkdownStyles(
         )
 
         StyleKind.ListMarker -> SpanStyle(color = colors.listMarker)
-        StyleKind.TaskMarker -> SpanStyle(
-            fontFamily = FontFamily.Monospace,
-            color = colors.accent,
+        StyleKind.TaskMarker -> SpanStyle(color = colors.textSecondary)
+        StyleKind.TaskMarkerDone -> SpanStyle(color = colors.accent)
+        StyleKind.TaskText -> SpanStyle(
+            color = colors.textMuted,
+            textDecoration = TextDecoration.LineThrough,
         )
     }
 

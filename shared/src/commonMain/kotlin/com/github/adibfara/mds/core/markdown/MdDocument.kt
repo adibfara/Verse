@@ -105,7 +105,9 @@ enum class StyleKind {
     Link,
     Quote,
     ListMarker,
-    TaskMarker;
+    TaskMarker,
+    TaskMarkerDone,
+    TaskText;
 
     val isHeading: Boolean get() = ordinal <= Heading6.ordinal
 
@@ -125,6 +127,12 @@ enum class StyleKind {
 
 data class StyledRange(val range: MdRange, val kind: StyleKind)
 
+const val TaskBoxPlaceholder = ' '
+
+data class MdTask(val range: MdRange, val checked: Boolean)
+
+data class MdLink(val range: MdRange, val target: String)
+
 data class DocumentStats(val words: Int, val characters: Int)
 
 data class MdDocument(
@@ -133,6 +141,8 @@ data class MdDocument(
     val styles: List<StyledRange>,
     val markers: List<MdRange>,
     val decorations: List<MaskEdit>,
+    val tasks: List<MdTask>,
+    val links: List<MdLink>,
     val stats: DocumentStats,
 ) {
     companion object {
@@ -142,6 +152,8 @@ data class MdDocument(
             styles = emptyList(),
             markers = emptyList(),
             decorations = emptyList(),
+            tasks = emptyList(),
+            links = emptyList(),
             stats = DocumentStats(0, 0),
         )
     }

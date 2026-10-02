@@ -7,7 +7,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WorkspaceTab(
     val path: FilePath,
-    val mode: EditorMode = EditorMode.Live,
+    val mode: EditorMode = EditorMode.Preview,
     val scrollOffset: Int = 0,
 )
 
