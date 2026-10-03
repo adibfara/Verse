@@ -61,6 +61,11 @@ fun MobileShell(
     onToggleTheme: () -> Unit,
     onOpenInDefaultApplication: () -> Unit,
     onOpenLink: (String) -> Unit,
+    onEditorCopyPath: () -> Unit,
+    onEditorShare: () -> Unit,
+    onEditorRequestRename: () -> Unit,
+    onEditorRequestMove: () -> Unit,
+    onEditorRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var browsePath by remember { mutableStateOf(FilePath.Root) }
@@ -111,6 +116,11 @@ fun MobileShell(
                         onRevealInFileManager = onOpenInDefaultApplication,
                         onOpenLink = onOpenLink,
                         showStatusBar = appState.settings.showStatusBar,
+                        onCopyPath = onEditorCopyPath,
+                        onShare = onEditorShare,
+                        onRequestRename = onEditorRequestRename,
+                        onRequestMove = onEditorRequestMove,
+                        onRequestDelete = onEditorRequestDelete,
                         modifier = Modifier.weight(1f),
                     )
                 }

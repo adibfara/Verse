@@ -47,6 +47,13 @@ private class JvmSystemOpener : SystemOpener {
     override fun openUrl(url: String) {
         runCatching { desktop?.browse(URI(url)) }
     }
+
+    override fun shareText(title: String, text: String) {
+        runCatching {
+            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            clipboard.setContents(java.awt.datatransfer.StringSelection(text), null)
+        }
+    }
 }
 
 private class JvmAppPaths : AppPaths {

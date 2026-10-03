@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -40,9 +44,71 @@ fun EditorPane(
     onRevealInFileManager: () -> Unit,
     onOpenLink: (String) -> Unit,
     showStatusBar: Boolean,
+    onCopyPath: () -> Unit,
+    onShare: () -> Unit,
+    onRequestRename: () -> Unit,
+    onRequestMove: () -> Unit,
+    onRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MdsTheme.colors
+    var findState by remember(state.path) { mutableStateOf<FindReplaceUiState?>(null) }
+    val focusRequester = remember(state.path) { FocusRequester() }
+
+    fun updateMatches(query: String, replacement: String, showReplace: Boolean) {
+        val matches = findMatches(state.value.text, query)
+        val current = if (matches.isEmpty()) -1 else 0
+        findState = FindReplaceUiState(
+            query = query,
+            replacement = replacement,
+            showReplace = showReplace,
+            matchCount = matches.size,
+            currentMatch = current,
+        )
+        matches.getOrNull(current)?.let { match ->
+            onEvent(EditorEvent.TextChanged(state.value.copy(selection = TextRange(match.first, match.last + 1))))
+        }
+    }
+
+    fun moveMatch(delta: Int) {
+        val current = findState ?: return
+        val matches = findMatches(state.value.text, current.query)
+        if (matches.isEmpty()) {
+            findState = current.copy(matchCount = 0, currentMatch = -1)
+            return
+        }
+        val nextIndex = ((current.currentMatch + delta) % matches.size + matches.size) % matches.size
+        findState = current.copy(matchCount = matches.size, currentMatch = nextIndex)
+        val match = matches[nextIndex]
+        onEvent(EditorEvent.TextChanged(state.value.copy(selection = TextRange(match.first, match.last + 1))))
+        focusRequester.requestFocus()
+    }
+
+    fun replaceCurrent() {
+        val current = findState ?: return
+        val matches = findMatches(state.value.text, current.query)
+        val match = matches.getOrNull(current.currentMatch) ?: return
+        val text = state.value.text
+        val updated = text.replaceRange(match.first, match.last + 1, current.replacement)
+        onEvent(
+            EditorEvent.TextChanged(
+                TextFieldValue(
+                    text = updated,
+                    selection = TextRange(match.first + current.replacement.length),
+                ),
+            ),
+        )
+        updateMatches(current.query, current.replacement, current.showReplace)
+    }
+
+    fun replaceAll() {
+        val current = findState ?: return
+        if (current.query.isEmpty()) return
+        val updated = state.value.text.replace(current.query, current.replacement, ignoreCase = true)
+        onEvent(EditorEvent.TextChanged(TextFieldValue(text = updated, selection = TextRange(0))))
+        findState = current.copy(matchCount = 0, currentMatch = -1)
+    }
+
     Column(modifier = modifier.fillMaxSize().background(colors.surface)) {
         if (state.hasFile) {
             EditorHeader(
@@ -54,6 +120,31 @@ fun EditorPane(
                 onRevealInFileManager = onRevealInFileManager,
                 onToggleFavorite = { onEvent(EditorEvent.ToggleFavorite) },
                 onRenameTitle = { onEvent(EditorEvent.RequestRename(it)) },
+                onOverflowAction = { action ->
+                    when (action) {
+                        EditorOverflowAction.Find -> updateMatches("", "", showReplace = false)
+                        EditorOverflowAction.Replace -> updateMatches("", "", showReplace = true)
+                        EditorOverflowAction.Rename -> onRequestRename()
+                        EditorOverflowAction.Move -> onRequestMove()
+                        EditorOverflowAction.CopyPath -> onCopyPath()
+                        EditorOverflowAction.Share -> onShare()
+                        EditorOverflowAction.Delete -> onRequestDelete()
+                    }
+                },
+            )
+            MdsDivider()
+        }
+
+        findState?.let { current ->
+            FindReplaceBar(
+                state = current,
+                onQueryChange = { updateMatches(it, current.replacement, current.showReplace) },
+                onReplacementChange = { findState = current.copy(replacement = it) },
+                onNext = { moveMatch(1) },
+                onPrevious = { moveMatch(-1) },
+                onReplace = ::replaceCurrent,
+                onReplaceAll = ::replaceAll,
+                onClose = { findState = null },
             )
             MdsDivider()
         }
@@ -68,7 +159,12 @@ fun EditorPane(
                     onRevealInFileManager = onRevealInFileManager,
                 )
 
-                else -> EditorContent(state = state, onEvent = onEvent, onOpenLink = onOpenLink)
+                else -> EditorContent(
+                    state = state,
+                    onEvent = onEvent,
+                    onOpenLink = onOpenLink,
+                    focusRequester = focusRequester,
+                )
             }
         }
 
@@ -84,11 +180,15 @@ private fun EditorContent(
     state: EditorUiState,
     onEvent: (EditorEvent) -> Unit,
     onOpenLink: (String) -> Unit,
+    focusRequester: FocusRequester,
 ) {
     val scrollState = remember(state.path) { ScrollState(0) }
-    val focusRequester = remember(state.path) { FocusRequester() }
     val interactionSource = remember { MutableInteractionSource() }
     val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
+
+    LaunchedEffect(state.path, state.focusContentRequestId) {
+        if (state.focusContentRequestId != null) focusRequester.requestFocus()
+    }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(

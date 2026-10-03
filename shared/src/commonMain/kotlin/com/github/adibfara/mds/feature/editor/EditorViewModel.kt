@@ -55,6 +55,8 @@ class EditorViewModel(
     private val parser = MarkdownParser()
     private val sessions = mutableMapOf<FilePath, EditorSession>()
     private var activePath: FilePath? = null
+    private var pendingFocusPath: FilePath? = null
+    private var focusRequestCounter = 0
 
     private val mutableState = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = mutableState.asStateFlow()
@@ -74,6 +76,7 @@ class EditorViewModel(
     fun onEvent(event: EditorEvent) {
         when (event) {
             is EditorEvent.Open -> open(event.path, event.kind)
+            is EditorEvent.RequestFocusContent -> requestFocusContent(event.path)
             is EditorEvent.Close -> closeSession(event.path)
             is EditorEvent.TextChanged -> textChanged(event.value)
             is EditorEvent.SetMode -> setMode(event.mode)
@@ -155,12 +158,25 @@ class EditorViewModel(
         mutableState.value = EditorUiState()
     }
 
+    private fun requestFocusContent(path: FilePath) {
+        pendingFocusPath = path
+        if (activePath == path) consumePendingFocus(path)
+    }
+
+    private fun consumePendingFocus(path: FilePath) {
+        if (pendingFocusPath != path) return
+        pendingFocusPath = null
+        focusRequestCounter++
+        mutableState.value = mutableState.value.copy(focusContentRequestId = focusRequestCounter)
+    }
+
     private fun open(path: FilePath, kind: FileKind) {
         if (activePath == path && sessions[path]?.isLoaded == true) return
         activePath = path
         val existing = sessions[path]
         if (existing != null && existing.isLoaded) {
             publish(existing)
+            consumePendingFocus(path)
             return
         }
         val session = existing ?: EditorSession(
@@ -192,7 +208,10 @@ class EditorViewModel(
                 MdDocument.Empty.copy(text = text, stats = computeStats(text))
             }
             session.isFavorite = spaceRepository.current.value?.favorites?.isFavorite(path) ?: false
-            if (activePath == path) publish(session)
+            if (activePath == path) {
+                publish(session)
+                consumePendingFocus(path)
+            }
         }
     }
 

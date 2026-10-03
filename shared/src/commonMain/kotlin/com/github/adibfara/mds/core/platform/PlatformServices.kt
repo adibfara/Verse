@@ -6,6 +6,7 @@ interface SystemOpener {
     fun openInDefaultApplication(absolutePath: String)
     fun revealInFileManager(absolutePath: String)
     fun openUrl(url: String)
+    fun shareText(title: String, text: String)
 }
 
 interface AppPaths {

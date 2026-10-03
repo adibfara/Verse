@@ -22,7 +22,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -30,7 +32,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -45,14 +49,21 @@ fun MdsTextField(
     singleLine: Boolean = true,
     focusRequester: FocusRequester? = null,
     onSubmit: (() -> Unit)? = null,
+    selectAllOnMount: Boolean = false,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     val colors = MdsTheme.colors
+    var selection by remember {
+        mutableStateOf(if (selectAllOnMount) TextRange(0, value.length) else TextRange(value.length))
+    }
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = TextFieldValue(text = value, selection = selection),
+        onValueChange = { fieldValue ->
+            selection = fieldValue.selection
+            onValueChange(fieldValue.text)
+        },
         modifier = modifier
             .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .background(colors.surfaceRaised, MdsTheme.shapes.small)

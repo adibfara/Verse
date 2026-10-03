@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -51,7 +50,6 @@ import com.github.adibfara.mds.core.markdown.MdDocument
 import com.github.adibfara.mds.core.markdown.MdLink
 import com.github.adibfara.mds.core.markdown.MdRange
 import com.github.adibfara.mds.core.markdown.MdTask
-import com.github.adibfara.mds.core.markdown.SpecialSpanKind
 import com.github.adibfara.mds.core.markdown.StyleKind
 import com.github.adibfara.mds.core.markdown.TaskBoxPlaceholder
 import com.github.adibfara.mds.core.markdown.hasListContinuation
@@ -61,12 +59,8 @@ import com.github.adibfara.mds.core.markdown.lineMarkerKindAt
 import com.github.adibfara.mds.core.markdown.lineRangeAt
 import com.github.adibfara.mds.core.markdown.maskDocument
 import com.github.adibfara.mds.core.markdown.maskEditsFor
-import com.github.adibfara.mds.core.markdown.specialSpanAt
-import kotlinx.coroutines.delay
 
 private const val TapPadding = 3f
-private const val PopupLingerMillis = 700L
-private const val PopupShowDelayMillis = 320L
 
 @Composable
 fun RenderedMarkdownField(
@@ -147,9 +141,7 @@ private fun MaskedMarkdownField(
     val currentToggleTask = rememberUpdatedState(onToggleTask)
     val currentOpenLink = rememberUpdatedState(onOpenLink)
     val overTarget = remember { mutableStateOf(false) }
-    val hoveredAnchor = remember { mutableStateOf<PopupAnchor?>(null) }
     val popupHovered = remember { mutableStateOf(false) }
-    val lingeringAnchor = remember { mutableStateOf<PopupAnchor?>(null) }
     val taps = remember(column) {
         Modifier
             .markdownTaps(
@@ -163,24 +155,10 @@ private fun MaskedMarkdownField(
                 maskedOf = { currentMasked.value },
                 layoutOf = { layout.value },
                 onOverTarget = { overTarget.value = it },
-                onAnchor = { hoveredAnchor.value = it },
             )
     }
 
-    LaunchedEffect(hoveredAnchor.value, popupHovered.value) {
-        val anchor = hoveredAnchor.value
-        if (anchor != null) {
-            if (lingeringAnchor.value == null) delay(PopupShowDelayMillis)
-            lingeringAnchor.value = anchor
-            return@LaunchedEffect
-        }
-        if (popupHovered.value) return@LaunchedEffect
-        delay(PopupLingerMillis)
-        lingeringAnchor.value = null
-    }
-
     val popup = popupStateFor(
-        anchor = lingeringAnchor.value,
         masked = masked,
         value = value,
         layout = layout.value,
@@ -235,10 +213,7 @@ private fun MaskedMarkdownField(
     }
 }
 
-private data class PopupAnchor(val kind: FormatPopupKind, val offset: Int)
-
 private fun popupStateFor(
-    anchor: PopupAnchor?,
     masked: MaskedDocument,
     value: TextFieldValue,
     layout: TextLayoutResult?,
@@ -246,38 +221,37 @@ private fun popupStateFor(
     if (layout == null) return null
     val text = masked.mask.originalText
     if (text != value.text) return null
-    anchor?.let { stateForAnchor(it, masked, text, layout) }?.let { return it }
+    listMarkerPopupState(masked, text, value.selection.start, layout)?.let { return it }
     return selectionPopupState(masked, value, layout)
 }
 
-private fun stateForAnchor(
-    anchor: PopupAnchor,
+private fun listMarkerPopupState(
     masked: MaskedDocument,
     text: String,
+    caretOffset: Int,
     layout: TextLayoutResult,
 ): FormatPopupState? {
-    val length = layout.layoutInput.text.length
-    return when (anchor.kind) {
-        FormatPopupKind.LineMarker -> {
-            val line = lineRangeAt(text, anchor.offset)
-            val glyph = markerGlyphRange(masked, line) ?: return null
-            val box = boundingBoxOf(layout, masked.transformedRangeOf(glyph), length) ?: return null
-            FormatPopupState(
-                kind = FormatPopupKind.LineMarker,
-                range = line,
-                anchor = box,
-                formats = emptySet(),
-                headingLevel = 0,
-                lineMarker = lineMarkerKindAt(text, anchor.offset),
-            )
-        }
+    val caretLine = lineRangeAt(text, caretOffset)
+    if (lineMarkerKindAt(text, caretLine.start) == LineMarkerKind.None) return null
 
-        FormatPopupKind.Inline -> {
-            val span = specialSpanAt(masked.styles, text, anchor.offset) ?: return null
-            if (span.kind != SpecialSpanKind.Inline) return null
-            inlinePopupState(masked, span.range, layout)
-        }
+    var blockStart = caretLine.start
+    while (blockStart > 0) {
+        val previousLine = lineRangeAt(text, blockStart - 1)
+        if (lineMarkerKindAt(text, previousLine.start) == LineMarkerKind.None) break
+        blockStart = previousLine.start
     }
+    val firstLine = lineRangeAt(text, blockStart)
+    val length = layout.layoutInput.text.length
+    val glyph = markerGlyphRange(masked, firstLine) ?: return null
+    val box = boundingBoxOf(layout, masked.transformedRangeOf(glyph), length) ?: return null
+    return FormatPopupState(
+        kind = FormatPopupKind.LineMarker,
+        range = caretLine,
+        anchor = box,
+        formats = emptySet(),
+        headingLevel = 0,
+        lineMarker = lineMarkerKindAt(text, caretLine.start),
+    )
 }
 
 private fun selectionPopupState(
@@ -374,55 +348,23 @@ private fun Modifier.markdownHover(
     maskedOf: () -> MaskedDocument,
     layoutOf: () -> TextLayoutResult?,
     onOverTarget: (Boolean) -> Unit,
-    onAnchor: (PopupAnchor?) -> Unit,
 ): Modifier = pointerInput(Unit) {
     awaitPointerEventScope {
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
             if (event.type == PointerEventType.Exit) {
                 onOverTarget(false)
-                onAnchor(null)
                 continue
             }
             val position = event.changes.lastOrNull()?.position
             val layout = layoutOf()
             if (position == null || layout == null) {
                 onOverTarget(false)
-                onAnchor(null)
                 continue
             }
             val masked = maskedOf()
             onOverTarget(targetAt(masked, layout, position) != null)
-            onAnchor(popupAnchorAt(masked, layout, position))
         }
-    }
-}
-
-private fun popupAnchorAt(
-    masked: MaskedDocument,
-    layout: TextLayoutResult,
-    position: Offset,
-): PopupAnchor? {
-    val length = layout.layoutInput.text.length
-    if (length == 0) return null
-    if (position.y < 0f || position.y > layout.size.height) return null
-    val line = layout.getLineForVerticalPosition(position.y)
-    if (position.x < layout.getLineLeft(line) - TapPadding) return null
-    if (position.x > layout.getLineRight(line) + TapPadding) return null
-
-    masked.tasks.forEach { task ->
-        val box = boundingBoxOf(layout, masked.transformedRangeOf(task.range), length)
-        if (box != null && box.inflate(TapPadding).contains(position)) {
-            return PopupAnchor(FormatPopupKind.LineMarker, task.range.start)
-        }
-    }
-
-    val text = masked.mask.originalText
-    val offset = masked.mask.transformedToOriginal(layout.getOffsetForPosition(position))
-    val span = specialSpanAt(masked.styles, text, offset) ?: return null
-    return when (span.kind) {
-        SpecialSpanKind.LineMarker -> PopupAnchor(FormatPopupKind.LineMarker, span.range.start)
-        SpecialSpanKind.Inline -> PopupAnchor(FormatPopupKind.Inline, span.range.start)
     }
 }
 

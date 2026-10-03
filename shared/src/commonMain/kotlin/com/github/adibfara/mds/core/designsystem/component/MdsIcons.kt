@@ -405,4 +405,27 @@ object MdsIcons {
         curveTo(5.3f, 10.5f, 4.2f, 11.6f, 4f, 12f)
         lineTo(5.3f, 12f)
     } }
+
+    val Share: ImageVector by lazy { strokeIcon("Share") {
+        circle(18f, 5f, 2.5f)
+        circle(6f, 12f, 2.5f)
+        circle(18f, 19f, 2.5f)
+        segment(8.2f, 10.8f, 15.8f, 6.2f)
+        segment(8.2f, 13.2f, 15.8f, 17.8f)
+    } }
+
+    val Mic: ImageVector by lazy { strokeIcon("Mic") {
+        moveTo(9.5f, 5.5f)
+        curveTo(9.5f, 3.6f, 10.6f, 2.5f, 12f, 2.5f)
+        curveTo(13.4f, 2.5f, 14.5f, 3.6f, 14.5f, 5.5f)
+        lineTo(14.5f, 11.5f)
+        curveTo(14.5f, 13.4f, 13.4f, 14.5f, 12f, 14.5f)
+        curveTo(10.6f, 14.5f, 9.5f, 13.4f, 9.5f, 11.5f)
+        close()
+        moveTo(6f, 11f)
+        curveTo(6f, 14.9f, 8.7f, 18f, 12f, 18f)
+        curveTo(15.3f, 18f, 18f, 14.9f, 18f, 11f)
+        segment(12f, 18f, 12f, 21.5f)
+        segment(8.5f, 21.5f, 15.5f, 21.5f)
+    } }
 }

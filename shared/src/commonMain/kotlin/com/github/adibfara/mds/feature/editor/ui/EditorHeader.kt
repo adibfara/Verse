@@ -41,6 +41,7 @@ fun EditorHeader(
     onRevealInFileManager: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRenameTitle: (String) -> Unit,
+    onOverflowAction: (EditorOverflowAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -87,6 +88,7 @@ fun EditorHeader(
             contentDescription = "Show in system explorer",
             onClick = onRevealInFileManager,
         )
+        EditorOverflowButton(onAction = onOverflowAction)
     }
 }
 

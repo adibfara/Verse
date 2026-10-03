@@ -57,6 +57,11 @@ fun DesktopShell(
     onOpenLink: (String) -> Unit,
     onCopyPath: (String) -> Unit,
     absolutePathOf: (com.github.adibfara.mds.core.model.FilePath) -> String,
+    onEditorCopyPath: () -> Unit,
+    onEditorShare: () -> Unit,
+    onEditorRequestRename: () -> Unit,
+    onEditorRequestMove: () -> Unit,
+    onEditorRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = MdsTheme.colors
@@ -100,6 +105,11 @@ fun DesktopShell(
                     onRevealInFileManager = onRevealInFileManager,
                     onOpenLink = onOpenLink,
                     showStatusBar = appState.settings.showStatusBar,
+                    onCopyPath = onEditorCopyPath,
+                    onShare = onEditorShare,
+                    onRequestRename = onEditorRequestRename,
+                    onRequestMove = onEditorRequestMove,
+                    onRequestDelete = onEditorRequestDelete,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
             }

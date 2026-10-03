@@ -110,6 +110,7 @@ private fun NamedDialog(
                 modifier = Modifier.fillMaxWidth(),
                 focusRequester = focusRequester,
                 onSubmit = { onEvent(ExplorerEvent.ConfirmDialog) },
+                selectAllOnMount = true,
             )
             MdsText(
                 text = "Location",

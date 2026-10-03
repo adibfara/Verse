@@ -384,7 +384,9 @@ class ExplorerViewModel(
                 loadDirectory(dialog.parent)
                 persistExpanded()
                 rebuildRows()
-                findNode(created)?.let { mutableActions.tryEmit(ExplorerAction.OpenFile(it)) }
+                findNode(created)?.let {
+                    mutableActions.tryEmit(ExplorerAction.OpenFile(it, focusContent = true))
+                }
             }
 
             is ExplorerDialog.NewFolder -> confirmNamed(dialog.name) { target, name ->

@@ -91,6 +91,18 @@ private class AndroidSystemOpener : SystemOpener {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(intent) }
     }
+
+    override fun shareText(title: String, text: String) {
+        val context = AndroidPlatform.require()
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        val chooser = Intent.createChooser(send, title).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chooser) }
+    }
 }
 
 private class AndroidAppPaths : AppPaths {

@@ -32,6 +32,7 @@ import com.github.adibfara.mds.core.command.Commands
 import com.github.adibfara.mds.core.command.commandShortcuts
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.designsystem.theme.resolveTheme
+import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.platform.LocationResolver
 import com.github.adibfara.mds.core.platform.PlatformFolderPickerOverlay
@@ -162,6 +163,33 @@ private fun WorkspaceScreen(
         spaceRepository.current.value?.fileSystem?.absolutePathOf(path).orEmpty()
     }
 
+    fun editorNode(): FileNode? {
+        val path = editorState.path ?: return null
+        return FileNode(
+            path = path,
+            name = path.name,
+            isDirectory = false,
+            kind = editorState.kind,
+            lastModified = 0L,
+            size = 0L,
+        )
+    }
+    val onEditorRequestRename: () -> Unit = {
+        editorNode()?.let { explorerViewModel.onEvent(ExplorerEvent.RequestRename(it)) }
+    }
+    val onEditorRequestMove: () -> Unit = {
+        editorNode()?.let { explorerViewModel.onEvent(ExplorerEvent.RequestMove(it)) }
+    }
+    val onEditorRequestDelete: () -> Unit = {
+        editorNode()?.let { explorerViewModel.onEvent(ExplorerEvent.RequestDelete(it)) }
+    }
+    val onEditorCopyPath: () -> Unit = {
+        editorState.path?.let { clipboard.setText(AnnotatedString(absolutePathOf(it))) }
+    }
+    val onEditorShare: () -> Unit = {
+        editorState.path?.let { systemOpener.shareText(it.name, editorState.value.text) }
+    }
+
     val handleCommand: (CommandId) -> Boolean = handler@{ id ->
         Commands.tabIndexOf(id)?.let { index ->
             tabsViewModel.onEvent(TabsEvent.JumpTo(index))
@@ -247,6 +275,11 @@ private fun WorkspaceScreen(
                 onOpenLink = openLink,
                 onCopyPath = { clipboard.setText(AnnotatedString(it)) },
                 absolutePathOf = absolutePathOf,
+                onEditorCopyPath = onEditorCopyPath,
+                onEditorShare = onEditorShare,
+                onEditorRequestRename = onEditorRequestRename,
+                onEditorRequestMove = onEditorRequestMove,
+                onEditorRequestDelete = onEditorRequestDelete,
                 modifier = shellModifier,
             )
             if (settingsVisible) {
@@ -286,6 +319,11 @@ private fun WorkspaceScreen(
                     editorState.path?.let { systemOpener.openInDefaultApplication(absolutePathOf(it)) }
                 },
                 onOpenLink = openLink,
+                onEditorCopyPath = onEditorCopyPath,
+                onEditorShare = onEditorShare,
+                onEditorRequestRename = onEditorRequestRename,
+                onEditorRequestMove = onEditorRequestMove,
+                onEditorRequestDelete = onEditorRequestDelete,
                 modifier = shellModifier,
             )
         }

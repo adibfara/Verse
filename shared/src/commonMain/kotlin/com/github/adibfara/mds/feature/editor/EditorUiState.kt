@@ -20,12 +20,14 @@ data class EditorUiState(
     val isDirty: Boolean = false,
     val isFavorite: Boolean = false,
     val errorMessage: String? = null,
+    val focusContentRequestId: Int? = null,
 ) {
     val hasFile: Boolean get() = path != null
 }
 
 sealed interface EditorEvent {
     data class Open(val path: FilePath, val kind: FileKind) : EditorEvent
+    data class RequestFocusContent(val path: FilePath) : EditorEvent
     data class Close(val path: FilePath) : EditorEvent
     data class TextChanged(val value: TextFieldValue) : EditorEvent
     data class SetMode(val mode: EditorMode) : EditorEvent

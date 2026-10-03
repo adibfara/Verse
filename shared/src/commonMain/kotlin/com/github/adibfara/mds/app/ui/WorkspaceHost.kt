@@ -42,7 +42,12 @@ fun WorkspaceEffects(
     LaunchedEffect(explorerViewModel) {
         explorerViewModel.actions.collect { action ->
             when (action) {
-                is ExplorerAction.OpenFile -> tabsViewModel.onEvent(TabsEvent.Open(action.node))
+                is ExplorerAction.OpenFile -> {
+                    tabsViewModel.onEvent(TabsEvent.Open(action.node))
+                    if (action.focusContent) {
+                        editorViewModel.onEvent(EditorEvent.RequestFocusContent(action.node.path))
+                    }
+                }
                 is ExplorerAction.OpenFileInNewTab ->
                     tabsViewModel.onEvent(TabsEvent.Open(action.node))
 

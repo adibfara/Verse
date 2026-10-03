@@ -60,7 +60,7 @@ sealed interface ExplorerEvent {
 }
 
 sealed interface ExplorerAction {
-    data class OpenFile(val node: FileNode) : ExplorerAction
+    data class OpenFile(val node: FileNode, val focusContent: Boolean = false) : ExplorerAction
     data class OpenFileInNewTab(val node: FileNode) : ExplorerAction
     data class FileRenamed(val from: FilePath, val to: FilePath) : ExplorerAction
     data class FileDeleted(val path: FilePath) : ExplorerAction
