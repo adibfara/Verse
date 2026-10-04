@@ -254,7 +254,7 @@ private fun continuationSplices(text: String, caretOffset: Int): List<Splice> {
 
     val isEmptyItem = text.substring(scan.contentStart, line.end).isBlank()
     if (isEmptyItem) {
-        return listOf(Splice(scan.indentEnd, line.end, ""))
+        return listOf(Splice(scan.indentEnd, line.end, "\n"))
     }
 
     val indentText = text.substring(line.start, scan.indentEnd)

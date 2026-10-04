@@ -407,6 +407,31 @@ object VerseIcons {
         close()
     } }
 
+    val Lock: ImageVector by lazy { strokeIcon("Lock") {
+        moveTo(8f, 11f)
+        lineTo(8f, 8f)
+        curveTo(8f, 5.8f, 9.8f, 4f, 12f, 4f)
+        curveTo(14.2f, 4f, 16f, 5.8f, 16f, 8f)
+        lineTo(16f, 11f)
+        moveTo(5f, 11f)
+        lineTo(19f, 11f)
+        lineTo(19f, 20f)
+        lineTo(5f, 20f)
+        close()
+    } }
+
+    val LockOpen: ImageVector by lazy { strokeIcon("LockOpen") {
+        moveTo(8f, 11f)
+        lineTo(8f, 7f)
+        curveTo(8f, 4.8f, 9.8f, 3f, 12f, 3f)
+        curveTo(13.9f, 3f, 15.4f, 4.1f, 16f, 5.6f)
+        moveTo(5f, 11f)
+        lineTo(19f, 11f)
+        lineTo(19f, 20f)
+        lineTo(5f, 20f)
+        close()
+    } }
+
     val Link: ImageVector by lazy { strokeIcon("Link") {
         moveTo(10.6f, 13.4f)
         curveTo(11.6f, 14.4f, 13.2f, 14.4f, 14.2f, 13.4f)

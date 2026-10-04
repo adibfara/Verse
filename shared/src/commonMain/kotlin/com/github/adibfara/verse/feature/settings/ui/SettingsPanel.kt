@@ -18,6 +18,7 @@ import com.github.adibfara.verse.core.designsystem.theme.ThemeMode
 import com.github.adibfara.verse.core.model.EditorMode
 import com.github.adibfara.verse.core.model.SortOrder
 import com.github.adibfara.verse.core.persistence.AppSettings
+import com.github.adibfara.verse.core.persistence.LockBehavior
 import com.github.adibfara.verse.core.persistence.StartupBehavior
 
 @Composable
@@ -83,6 +84,12 @@ fun SettingsPanel(
                     options = listOf(300L to "Fast", 800L to "Normal", 2000L to "Relaxed"),
                     selected = settings.autoSaveDelayMillis,
                     onSelect = { delay -> onSettingsChange { it.copy(autoSaveDelayMillis = delay) } },
+                )
+                OptionRow(
+                    label = "Locked documents",
+                    options = LockBehavior.entries.map { it to it.label },
+                    selected = settings.lockBehavior,
+                    onSelect = { behavior -> onSettingsChange { it.copy(lockBehavior = behavior) } },
                 )
             }
 

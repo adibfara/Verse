@@ -22,6 +22,20 @@ enum class StartupBehavior {
 }
 
 @Serializable
+enum class LockBehavior {
+    AlwaysUnlocked,
+    Remember,
+    RememberPerFile;
+
+    val label: String
+        get() = when (this) {
+            AlwaysUnlocked -> "Always unlocked"
+            Remember -> "Remember last"
+            RememberPerFile -> "Remember per file"
+        }
+}
+
+@Serializable
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val recentSpaces: List<RecentSpace> = emptyList(),
@@ -34,4 +48,6 @@ data class AppSettings(
     val autoSaveDelayMillis: Long = 800L,
     val showStatusBar: Boolean = true,
     val showFormattingToolbar: Boolean = true,
+    val lockBehavior: LockBehavior = LockBehavior.RememberPerFile,
+    val rememberLocked: Boolean = false,
 )

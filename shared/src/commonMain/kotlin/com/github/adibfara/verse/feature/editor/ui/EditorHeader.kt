@@ -44,9 +44,11 @@ fun EditorHeader(
     mode: EditorMode,
     isDirty: Boolean,
     isFavorite: Boolean,
+    isLocked: Boolean = false,
     onModeChange: (EditorMode) -> Unit,
     onRevealInFileManager: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleLock: () -> Unit = {},
     onRenameTitle: (String) -> Unit,
     onOverflowAction: (EditorOverflowAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -94,8 +96,10 @@ fun EditorHeader(
             CompactHeaderActions(
                 mode = mode,
                 isFavorite = isFavorite,
+                isLocked = isLocked,
                 onModeChange = onModeChange,
                 onToggleFavorite = onToggleFavorite,
+                onToggleLock = onToggleLock,
                 onOpenSettings = onOpenSettings,
                 onVoiceInput = onVoiceInput,
                 onOverflowAction = onOverflowAction,
@@ -108,6 +112,13 @@ fun EditorHeader(
                     onClick = it,
                 )
             }
+            VerseIconButton(
+                icon = VerseIcons.LockOpen,
+                contentDescription = if (isLocked) "Unlock document" else "Lock document (read only)",
+                onClick = onToggleLock,
+                selected = isLocked,
+                selectedIcon = VerseIcons.Lock,
+            )
             VerseIconButton(
                 icon = VerseIcons.Heart,
                 contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
@@ -156,8 +167,10 @@ fun EditorHeader(
 private fun CompactHeaderActions(
     mode: EditorMode,
     isFavorite: Boolean,
+    isLocked: Boolean,
     onModeChange: (EditorMode) -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleLock: () -> Unit,
     onOpenSettings: (() -> Unit)?,
     onVoiceInput: (() -> Unit)?,
     onOverflowAction: (EditorOverflowAction) -> Unit,
@@ -181,6 +194,13 @@ private fun CompactHeaderActions(
         }
     }
     VerseFloatingBar {
+        VerseIconButton(
+            icon = VerseIcons.LockOpen,
+            contentDescription = if (isLocked) "Unlock document" else "Lock document (read only)",
+            onClick = onToggleLock,
+            selected = isLocked,
+            selectedIcon = VerseIcons.Lock,
+        )
         VerseIconButton(
             icon = VerseIcons.Heart,
             contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",

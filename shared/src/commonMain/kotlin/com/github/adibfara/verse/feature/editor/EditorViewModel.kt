@@ -18,6 +18,7 @@ import com.github.adibfara.verse.core.markdown.hasListContinuation
 import com.github.adibfara.verse.core.model.EditorMode
 import com.github.adibfara.verse.core.model.FileKind
 import com.github.adibfara.verse.core.model.FilePath
+import com.github.adibfara.verse.core.persistence.LockBehavior
 import com.github.adibfara.verse.core.persistence.SettingsStore
 import com.github.adibfara.verse.feature.explorer.usecase.NameValidation
 import com.github.adibfara.verse.feature.explorer.usecase.validateName
@@ -42,6 +43,7 @@ private class EditorSession(
     var savedText: String,
     var isLoaded: Boolean,
     var isFavorite: Boolean = false,
+    var isLocked: Boolean = false,
 ) {
     val isDirty: Boolean get() = value.text != savedText
 
@@ -107,12 +109,14 @@ class EditorViewModel(
 
             EditorEvent.ClearActive -> clearActive()
             EditorEvent.ToggleFavorite -> toggleFavorite()
+            EditorEvent.ToggleLock -> toggleLock()
             is EditorEvent.RequestRename -> renameActiveFile(event.name)
         }
     }
 
     private fun renameActiveFile(newName: String) {
         val session = activeSession() ?: return
+        if (session.isLocked) return
         val validation = validateName(newName)
         if (validation is NameValidation.Invalid) {
             mutableState.value = mutableState.value.copy(errorMessage = validation.reason)
@@ -142,6 +146,7 @@ class EditorViewModel(
                 savedText = session.savedText,
                 isLoaded = session.isLoaded,
                 isFavorite = session.isFavorite,
+                isLocked = session.isLocked,
             )
             sessions[renamed] = updated
             if (activePath == from) {
@@ -160,6 +165,31 @@ class EditorViewModel(
             session.isFavorite = isFavorite
             if (activePath == session.path) publish(session)
         }
+    }
+
+    private fun toggleLock() {
+        val session = activeSession() ?: return
+        val locked = !session.isLocked
+        session.isLocked = locked
+        publish(session)
+        viewModelScope.launch {
+            when (settingsStore.settings.value.lockBehavior) {
+                LockBehavior.AlwaysUnlocked -> Unit
+                LockBehavior.Remember -> settingsStore.update { it.copy(rememberLocked = locked) }
+                LockBehavior.RememberPerFile -> {
+                    val repository = spaceRepository.current.value?.locked ?: return@launch
+                    repository.setLocked(session.path, locked)
+                }
+            }
+        }
+    }
+
+    private suspend fun initialLocked(path: FilePath): Boolean = when (
+        settingsStore.settings.value.lockBehavior
+    ) {
+        LockBehavior.AlwaysUnlocked -> false
+        LockBehavior.Remember -> settingsStore.settings.value.rememberLocked
+        LockBehavior.RememberPerFile -> spaceRepository.current.value?.locked?.isLocked(path) ?: false
     }
 
     fun closeSpace() {
@@ -224,6 +254,7 @@ class EditorViewModel(
                 MdDocument.Empty.copy(text = text, stats = computeStats(text))
             }
             session.isFavorite = spaceRepository.current.value?.favorites?.isFavorite(path) ?: false
+            session.isLocked = initialLocked(path)
             if (activePath == path) {
                 publish(session)
                 consumePendingFocus(path)
@@ -244,8 +275,9 @@ class EditorViewModel(
         }
     }
 
-    private fun textChanged(value: TextFieldValue, reparse: Boolean = true) {
+    private fun textChanged(value: TextFieldValue, reparse: Boolean = true, force: Boolean = false) {
         val session = activeSession() ?: return
+        if (!force && session.isLocked && value.text != session.value.text) return
         if (reparse && continuedList(session, value)) return
         val textChanged = session.value.text != value.text
         val wasDirty = session.isDirty
@@ -308,7 +340,7 @@ class EditorViewModel(
         if (text.substring(range.start, range.end) == replacement) return
         val updated = text.replaceRange(range.start, range.end, replacement)
         session.document = documentWithTaskToggled(session.document, updated, range, checked)
-        textChanged(session.value.copy(text = updated))
+        textChanged(session.value.copy(text = updated), force = true)
     }
 
     private fun jumpToAnchor(target: String) {
@@ -325,6 +357,7 @@ class EditorViewModel(
 
     private fun applyFormat(action: FormatAction) {
         val session = activeSession() ?: return
+        if (session.isLocked) return
         if (session.kind != FileKind.Markdown) return
         val current = session.value
         applyFormatTo(
@@ -393,6 +426,7 @@ class EditorViewModel(
             savedText = session.savedText,
             isLoaded = session.isLoaded,
             isFavorite = session.isFavorite,
+            isLocked = session.isLocked,
         )
         sessions[to] = moved
         if (activePath == from) {
@@ -444,6 +478,7 @@ class EditorViewModel(
             isLoading = !session.isLoaded,
             isDirty = session.isDirty,
             isFavorite = session.isFavorite,
+            isLocked = session.isLocked,
         )
     }
 

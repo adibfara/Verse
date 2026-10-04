@@ -87,6 +87,7 @@ import com.github.adibfara.verse.core.markdown.maskEditsFor
 import com.github.adibfara.verse.core.markdown.specialSpanAt
 
 private const val TapPadding = 3f
+private const val TaskTapPadding = 9f
 
 @Composable
 fun RenderedMarkdownField(
@@ -98,6 +99,7 @@ fun RenderedMarkdownField(
     onFormat: (FormatAction) -> Unit,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     MaskedMarkdownField(
@@ -110,6 +112,7 @@ fun RenderedMarkdownField(
         onFormat = onFormat,
         focusRequester = focusRequester,
         showFormatPopup = showFormatPopup,
+        readOnly = readOnly,
         modifier = modifier,
     )
 }
@@ -124,6 +127,7 @@ fun LiveMarkdownField(
     onFormat: (FormatAction) -> Unit,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val revealedLine = remember(value.text, value.selection.start) {
@@ -139,6 +143,7 @@ fun LiveMarkdownField(
         onFormat = onFormat,
         focusRequester = focusRequester,
         showFormatPopup = showFormatPopup,
+        readOnly = readOnly,
         modifier = modifier,
     )
 }
@@ -155,6 +160,7 @@ private fun MaskedMarkdownField(
     onFormat: (FormatAction) -> Unit,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val styles = rememberMarkdownStyles()
@@ -176,12 +182,13 @@ private fun MaskedMarkdownField(
     val currentToggleTask = rememberUpdatedState(onToggleTask)
     val currentOpenLink = rememberUpdatedState(onOpenLink)
     val overTarget = remember { mutableStateOf(false) }
-    val taps = remember(column) {
+    val taps = remember(column, readOnly) {
         Modifier
             .markdownTaps(
                 maskedOf = { currentMasked.value },
                 layoutOf = { layout.value },
                 column = column,
+                toggleOnText = readOnly,
                 onToggleTask = { range, checked -> currentToggleTask.value(range, checked) },
                 onOpenLink = { target -> currentOpenLink.value(target) },
                 onCopyCode = { code -> clipboard.setText(AnnotatedString(code)) },
@@ -189,6 +196,7 @@ private fun MaskedMarkdownField(
             .markdownHover(
                 maskedOf = { currentMasked.value },
                 layoutOf = { layout.value },
+                toggleOnText = readOnly,
                 onOverTarget = { overTarget.value = it },
             )
     }
@@ -233,8 +241,12 @@ private fun MaskedMarkdownField(
     val caretMargin = with(density) { VerseTheme.spacing.xl.toPx() }
     val keyboardInset = WindowInsets.ime.getBottom(density)
     val bringCaretIntoView = remember { BringIntoViewRequester() }
+    val lastBroughtCaret = remember { mutableStateOf<Pair<Int, Int>?>(null) }
     LaunchedEffect(value.selection.start, layout.value, keyboardInset) {
         val result = layout.value ?: return@LaunchedEffect
+        val key = value.selection.start to keyboardInset
+        if (lastBroughtCaret.value == key) return@LaunchedEffect
+        lastBroughtCaret.value = key
         bringCaretIntoView.bringIntoView(
             caretBoundsOf(masked, result, value.selection.start, caretMargin),
         )
@@ -262,6 +274,7 @@ private fun MaskedMarkdownField(
             cursorBrush = cursorBrush,
             visualTransformation = transformation,
             onTextLayout = { layout.value = it },
+            readOnly = readOnly,
         )
 
         MarkdownOverlays(
@@ -393,6 +406,7 @@ fun RawMarkdownField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
     focusRequester: FocusRequester? = null,
+    readOnly: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
@@ -416,6 +430,7 @@ fun RawMarkdownField(
         textStyle = VerseTheme.typography.editorRaw.copy(color = colors.textPrimary),
         cursorBrush = SolidColor(colors.caret),
         onTextLayout = { layout.value = it },
+        readOnly = readOnly,
     )
 }
 
@@ -433,17 +448,18 @@ private fun Modifier.markdownTaps(
     maskedOf: () -> MaskedDocument,
     layoutOf: () -> TextLayoutResult?,
     column: CaretColumn,
+    toggleOnText: Boolean,
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onCopyCode: (String) -> Unit,
-): Modifier = pointerInput(Unit) {
+): Modifier = pointerInput(toggleOnText) {
     val slop = viewConfiguration.touchSlop
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         column.x = null
         val layout = layoutOf() ?: return@awaitEachGesture
         val masked = maskedOf()
-        val target = targetAt(masked, layout, down.position) ?: return@awaitEachGesture
+        val target = targetAt(masked, layout, down.position, toggleOnText) ?: return@awaitEachGesture
         down.consume()
         var last = down.position
         var travelled = 0f
@@ -456,7 +472,7 @@ private fun Modifier.markdownTaps(
             change.consume()
             if (!change.pressed) break
         }
-        if (targetAt(masked, layout, last) != target) return@awaitEachGesture
+        if (targetAt(masked, layout, last, toggleOnText) != target) return@awaitEachGesture
         when (target) {
             is TapTarget.Task -> onToggleTask(target.task.range, !target.task.checked)
             is TapTarget.Link -> onOpenLink(target.link.target)
@@ -468,8 +484,9 @@ private fun Modifier.markdownTaps(
 private fun Modifier.markdownHover(
     maskedOf: () -> MaskedDocument,
     layoutOf: () -> TextLayoutResult?,
+    toggleOnText: Boolean,
     onOverTarget: (Boolean) -> Unit,
-): Modifier = pointerInput(Unit) {
+): Modifier = pointerInput(toggleOnText) {
     awaitPointerEventScope {
         while (true) {
             val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -484,7 +501,7 @@ private fun Modifier.markdownHover(
                 continue
             }
             val masked = maskedOf()
-            onOverTarget(targetAt(masked, layout, position) != null)
+            onOverTarget(targetAt(masked, layout, position, toggleOnText) != null)
         }
     }
 }
@@ -493,6 +510,7 @@ private fun targetAt(
     masked: MaskedDocument,
     layout: TextLayoutResult,
     position: Offset,
+    toggleOnText: Boolean,
 ): TapTarget? {
     val length = layout.layoutInput.text.length
     if (length == 0) return null
@@ -506,20 +524,33 @@ private fun targetAt(
     }
 
     val line = layout.getLineForVerticalPosition(position.y)
-    if (position.x < layout.getLineLeft(line) - TapPadding) return null
-    if (position.x > layout.getLineRight(line) + TapPadding) return null
+    if (!toggleOnText) {
+        if (position.x < layout.getLineLeft(line) - TaskTapPadding) return null
+        if (position.x > layout.getLineRight(line) + TaskTapPadding) return null
+    }
+
+    val offset = layout.getOffsetForPosition(position)
 
     masked.tasks.forEach { task ->
         val box = boundingBoxOf(layout, masked.transformedRangeOf(task.range), length)
-        if (box != null && box.inflate(TapPadding).contains(position)) {
+        if (box != null && box.inflate(TaskTapPadding).contains(position)) {
             return TapTarget.Task(task)
         }
     }
 
-    val offset = layout.getOffsetForPosition(position)
     masked.links.forEach { link ->
         val range = masked.transformedRangeOf(link.range)
         if (offset >= range.start && offset < range.end) return TapTarget.Link(link)
+    }
+
+    if (toggleOnText) {
+        val originalOffset = masked.mask.transformedToOriginal(offset)
+        val sourceLine = lineRangeAt(masked.mask.originalText, originalOffset)
+        masked.tasks.forEach { task ->
+            if (task.range.start >= sourceLine.start && task.range.start <= sourceLine.end) {
+                return TapTarget.Task(task)
+            }
+        }
     }
     return null
 }
@@ -585,7 +616,7 @@ private fun plainCaretBoundsOf(
     )
 }
 
-private const val BoxSideRatio = 1.15f
+private const val BoxSideRatio = 1.3f
 private const val BoxCornerRatio = 0.3f
 private const val BoxStrokeRatio = 0.11f
 private const val BoxBaselineRatio = 0.34f
@@ -709,10 +740,11 @@ private fun Modifier.drawBlockDecorations(
 
     masked.tasks.forEach { task ->
         val range = masked.transformedRangeOf(task.range)
-        if (range.length != 1) return@forEach
-        if (transformed.getOrNull(range.start) != TaskBoxPlaceholder) return@forEach
-        val glyph = boundingBoxOf(layout, range, transformed.length) ?: return@forEach
-        val baseline = layout.getLineBaseline(layout.getLineForOffset(range.start))
+        val boxOffset = range.start + range.length / 2
+        if (transformed.getOrNull(boxOffset) != TaskBoxPlaceholder) return@forEach
+        val glyph = boundingBoxOf(layout, MdRange(boxOffset, boxOffset + 1), transformed.length)
+            ?: return@forEach
+        val baseline = layout.getLineBaseline(layout.getLineForOffset(boxOffset))
         drawTaskBox(glyph, baseline, task.checked, outline, fill, check)
     }
 

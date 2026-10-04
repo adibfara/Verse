@@ -19,6 +19,7 @@ data class EditorUiState(
     val isLoading: Boolean = false,
     val isDirty: Boolean = false,
     val isFavorite: Boolean = false,
+    val isLocked: Boolean = false,
     val errorMessage: String? = null,
     val focusContentRequestId: Int? = null,
 ) {
@@ -42,6 +43,7 @@ sealed interface EditorEvent {
     data object DismissError : EditorEvent
     data object ClearActive : EditorEvent
     data object ToggleFavorite : EditorEvent
+    data object ToggleLock : EditorEvent
     data class RequestRename(val name: String) : EditorEvent
 }
 

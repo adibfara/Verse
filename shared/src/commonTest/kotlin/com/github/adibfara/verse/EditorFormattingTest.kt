@@ -141,7 +141,7 @@ class EditorFormattingTest {
         val state = stateAfter("- milk", FormatAction.SetLineMarker(0, LineMarkerKind.Task))
         assertEquals("- [ ] milk", state.value.text)
         assertEquals(state.value.text, state.document.text)
-        assertEquals("$TaskBoxPlaceholder milk", renderedTextOf(state))
+        assertEquals(" $TaskBoxPlaceholder  milk", renderedTextOf(state))
     }
 
     @Test
@@ -228,9 +228,10 @@ class EditorFormattingTest {
     }
 
     @Test
-    fun aTypedNewlineOnAnEmptyItemDropsTheMarker() {
+    fun aTypedNewlineOnAnEmptyItemEndsTheListAndStartsANewLine() {
         val state = afterTypingNewline("- milk\n- ", 9)
-        assertEquals("- milk\n", state.value.text)
+        assertEquals("- milk\n\n", state.value.text)
+        assertEquals(8, state.value.selection.start)
     }
 
     @Test

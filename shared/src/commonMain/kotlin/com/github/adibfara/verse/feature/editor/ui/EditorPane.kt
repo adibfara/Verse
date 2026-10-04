@@ -155,9 +155,11 @@ fun EditorPane(
                 mode = state.mode,
                 isDirty = state.isDirty,
                 isFavorite = state.isFavorite,
+                isLocked = state.isLocked,
                 onModeChange = { onEvent(EditorEvent.SetMode(it)) },
                 onRevealInFileManager = onRevealInFileManager,
                 onToggleFavorite = { onEvent(EditorEvent.ToggleFavorite) },
+                onToggleLock = { onEvent(EditorEvent.ToggleLock) },
                 onRenameTitle = { onEvent(EditorEvent.RequestRename(it)) },
                 leading = headerLeading,
                 isDarkTheme = isDarkTheme,
@@ -214,10 +216,11 @@ fun EditorPane(
                     focusRequester = focusRequester,
                     horizontalPadding = contentHorizontalPadding,
                     showFormatPopup = showFormatPopup,
+                    readOnly = state.isLocked,
                 )
             }
 
-            if (showFormattingToolbar && state.hasFile && state.kind == FileKind.Markdown) {
+            if (showFormattingToolbar && state.hasFile && state.kind == FileKind.Markdown && !state.isLocked) {
                 PersistentFormatToolbar(
                     state = state,
                     onFormat = { onEvent(EditorEvent.ApplyFormat(it)) },
@@ -233,7 +236,7 @@ fun EditorPane(
             EditorStatusBar(stats = state.document.stats, isDirty = state.isDirty)
         }
 
-        if (showKeyboardToolbar && state.hasFile && state.kind == FileKind.Markdown) {
+        if (showKeyboardToolbar && state.hasFile && state.kind == FileKind.Markdown && !state.isLocked) {
             VerseDivider()
             MobileFormatToolbar(
                 state = state,
@@ -273,6 +276,7 @@ private fun EditorContent(
     focusRequester: FocusRequester,
     horizontalPadding: Dp = VerseTheme.spacing.xl,
     showFormatPopup: Boolean = true,
+    readOnly: Boolean = false,
 ) {
     val scrollState = remember(state.path) { ScrollState(0) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -293,10 +297,16 @@ private fun EditorContent(
                 .fillMaxWidth()
                 .verticalScroll(scrollState)
                 .heightIn(min = viewportHeight)
-                .clickable(interactionSource = interactionSource, indication = null) {
-                    onValueChange(state.value.copy(selection = TextRange(state.value.text.length)))
-                    focusRequester.requestFocus()
-                }
+                .then(
+                    if (readOnly) {
+                        Modifier
+                    } else {
+                        Modifier.clickable(interactionSource = interactionSource, indication = null) {
+                            onValueChange(state.value.copy(selection = TextRange(state.value.text.length)))
+                            focusRequester.requestFocus()
+                        }
+                    },
+                )
                 .padding(horizontal = horizontalPadding, vertical = VerseTheme.spacing.lg),
         ) {
             val onToggleTask: (MdRange, Boolean) -> Unit = { range, checked ->
@@ -312,7 +322,8 @@ private fun EditorContent(
                     onOpenLink = openLink,
                     onFormat = onFormat,
                     focusRequester = focusRequester,
-                    showFormatPopup = showFormatPopup,
+                    showFormatPopup = showFormatPopup && !readOnly,
+                    readOnly = readOnly,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -324,7 +335,8 @@ private fun EditorContent(
                     onOpenLink = openLink,
                     onFormat = onFormat,
                     focusRequester = focusRequester,
-                    showFormatPopup = showFormatPopup,
+                    showFormatPopup = showFormatPopup && !readOnly,
+                    readOnly = readOnly,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -332,6 +344,7 @@ private fun EditorContent(
                     value = state.value,
                     onValueChange = onValueChange,
                     focusRequester = focusRequester,
+                    readOnly = readOnly,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

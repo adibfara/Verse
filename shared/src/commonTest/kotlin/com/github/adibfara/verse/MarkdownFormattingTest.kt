@@ -281,10 +281,24 @@ class MarkdownFormattingTest {
     }
 
     @Test
-    fun enterOnAnEmptyListItemRemovesTheMarkerInstead() {
+    fun enterOnAnEmptyListItemEndsTheListAndStartsANewLine() {
         val edit = applyFormatAction("- first\n- ", MdRange(10, 10), FormatAction.ContinueList)
-        assertEquals("- first\n", edit.text)
-        assertEquals(MdRange(8, 8), edit.selection)
+        assertEquals("- first\n\n", edit.text)
+        assertEquals(MdRange(9, 9), edit.selection)
+    }
+
+    @Test
+    fun enterOnAnEmptyTaskItemEndsTheListAndStartsANewLine() {
+        val edit = applyFormatAction("- [x] done\n- [ ] ", MdRange(17, 17), FormatAction.ContinueList)
+        assertEquals("- [x] done\n\n", edit.text)
+        assertEquals(MdRange(12, 12), edit.selection)
+    }
+
+    @Test
+    fun enterOnAnEmptyOrderedItemEndsTheListAndStartsANewLine() {
+        val edit = applyFormatAction("1. first\n2. ", MdRange(12, 12), FormatAction.ContinueList)
+        assertEquals("1. first\n\n", edit.text)
+        assertEquals(MdRange(10, 10), edit.selection)
     }
 
     @Test

@@ -42,7 +42,7 @@ class MarkdownParser {
 }
 
 private const val BulletGlyph = "•"
-private val TaskBoxReplacement = TaskBoxPlaceholder.toString()
+private val TaskBoxReplacement = " $TaskBoxPlaceholder "
 private val CodeIndent = " ".repeat(CodeIndentSpaces)
 
 private fun taskStyles(text: String, tasks: List<MdTask>): List<StyledRange> =
