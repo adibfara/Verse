@@ -17,11 +17,11 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "com.github.adibfara.mds.MainKt"
+        mainClass = "com.github.adibfara.verse.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "MDs"
+            packageName = "Verse"
             packageVersion = "1.0.0"
             description = "A fast, simple markdown workspace"
 

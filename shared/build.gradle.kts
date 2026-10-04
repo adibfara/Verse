@@ -12,7 +12,7 @@ kotlin {
     jvm()
 
     android {
-        namespace = "com.github.adibfara.mds.shared"
+        namespace = "com.github.adibfara.verse.shared"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
 

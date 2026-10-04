@@ -1,4 +1,4 @@
-rootProject.name = "MDs"
+rootProject.name = "Verse"
 
 pluginManagement {
     repositories {

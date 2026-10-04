@@ -26,7 +26,7 @@ dependencies {
 }
 
 android {
-    namespace = "com.github.adibfara.mds"
+    namespace = "com.github.adibfara.verse"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     signingConfigs {
         create("release") {
@@ -37,7 +37,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId = "com.github.adibfara.mds"
+        applicationId = "com.github.adibfara.verse"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

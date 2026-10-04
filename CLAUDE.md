@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-MDs is an Obsidian-like markdown app built on Compose Multiplatform (Kotlin 2.4.20, Compose MP 1.12.1, AGP 9.1.1). Targets are `jvm` (desktop, the primary focus) and `android`. The defining goal is **speed**: instant startup, instant file open, instant tab switching. Nothing may block the main thread.
+Verse is an Obsidian-like markdown app built on Compose Multiplatform (Kotlin 2.4.20, Compose MP 1.12.1, AGP 9.1.1). Targets are `jvm` (desktop, the primary focus) and `android`. The defining goal is **speed**: instant startup, instant file open, instant tab switching. Nothing may block the main thread.
 
 ## Commands
 
@@ -28,7 +28,7 @@ Gradle `-q` hides test stdout. To read `println` output from a test, parse `shar
 - **No comments in any Kotlin file.** This is a deliberate project rule, not an oversight — `grep -rn "^\s*//" --include=*.kt` must stay at 0. Name things so comments aren't needed.
 - Single `:shared` module organised by package (`core/*`, `feature/*`), not Gradle feature modules. Keep it that way.
 - UI is split into small composables; screens compose components, components take state + lambdas only.
-- **Zero hard-coded colors or dimensions outside `core/designsystem/theme`.** This is what makes new themes free. Use `MdsTheme.colors/typography/spacing/shapes/sizes`.
+- **Zero hard-coded colors or dimensions outside `core/designsystem/theme`.** This is what makes new themes free. Use `VerseTheme.colors/typography/spacing/shapes/sizes`.
 
 ## Architecture
 
@@ -92,7 +92,7 @@ Toggling a checkbox goes through `documentWithTaskToggled`, which rewrites the p
 
 The **hover format toolbar** (`FormatPopup.kt`) is the third thing the hit-test drives. Hovering special text — emphasis, inline code, a link, a heading, a bullet or a checkbox — reports a `PopupAnchor(kind, offset)`, never a snapshot of the popup's contents: everything shown is re-derived from the *current* `MaskedDocument` plus text each composition (`popupStateFor` in `MarkdownFields.kt`). That is what makes the toolbar self-healing — after you click one of its buttons the text has changed, and the popup simply recomputes which formats are active and where its anchor glyph now sits instead of displaying a stale row. Plain text reports nothing, so the toolbar is only ever offered where there is something to toggle. A non-collapsed selection is the fallback anchor, which is how selecting text opens the same toolbar.
 
-Its buttons are tapped through `detectTapGestures`, **not** `Modifier.clickable`: clickable is focusable and requests focus on press, which pulled focus out of the editor on every toggle. Nothing in the toolbar is a focus target, and the `Popup` is `focusable = false`, so the caret never leaves the text field. Do not "fix" these back to `clickable`/`MdsIconButton`.
+Its buttons are tapped through `detectTapGestures`, **not** `Modifier.clickable`: clickable is focusable and requests focus on press, which pulled focus out of the editor on every toggle. Nothing in the toolbar is a focus target, and the `Popup` is `focusable = false`, so the caret never leaves the text field. Do not "fix" these back to `clickable`/`VerseIconButton`.
 
 Its timing is one `LaunchedEffect` keyed on (hovered anchor, popup-hovered): a fresh appearance waits `PopupShowDelayMillis` and fades in, moving to another special span while the toolbar is already up swaps it over **immediately and without a fade** (the fade lives in a `remember`ed `Animatable` that only re-runs when the popup leaves composition), and leaving either the span or the toolbar lingers `PopupLingerMillis` so the pointer can cross the gap between them. The toolbar reports its own hover back up, or that gap would dismiss it.
 
@@ -112,8 +112,8 @@ Task markers are detected by **scanning the source line** (`findTaskMarkerInLine
 
 ### Persistence
 
-- `%APPDATA%/MDs/settings.json` — theme, recent spaces, startup behaviour, font size, sort order.
-- `<space>/.mds/workspace.json` — tabs, active tab, expanded folders, sidebar width. Living inside the space means the session travels with the folder. Ephemeral/in-memory spaces fall back to the app data dir.
+- `%APPDATA%/Verse/settings.json` — theme, recent spaces, startup behaviour, font size, sort order.
+- `<space>/.verse/workspace.json` — tabs, active tab, expanded folders, sidebar width. Living inside the space means the session travels with the folder. Ephemeral/in-memory spaces fall back to the app data dir.
 
 Both readers strip a leading BOM before decoding; a hand-edited file saved by a Windows editor would otherwise silently reset to defaults. Writes are atomic and debounced off the main thread.
 
@@ -125,7 +125,7 @@ Desktop entry (`desktopApp/src/main/kotlin/.../main.kt`) owns window concerns: t
 
 ## Platform gotchas that will cost you time
 
-- **`material-icons-extended` does not exist for Compose MP 1.12** (it stopped at 1.7.3). All icons are hand-built Lucide-style stroke paths in `core/designsystem/component/MdsIcons.kt`. `ImageVector.Builder.path` is a top-level extension needing `import androidx.compose.ui.graphics.vector.path`.
+- **`material-icons-extended` does not exist for Compose MP 1.12** (it stopped at 1.7.3). All icons are hand-built Lucide-style stroke paths in `core/designsystem/component/VerseIcons.kt`. `ImageVector.Builder.path` is a top-level extension needing `import androidx.compose.ui.graphics.vector.path`.
 - **`PointerButton` and `PointerEvent.button` are desktop-only** and will break the Android build. Use `Modifier.onSecondaryClick` / `onTertiaryClick` from `core/designsystem/component/PointerInteractions.kt` (right-click on desktop, long-press on Android).
 - The editor deliberately uses the **legacy** `BasicTextField(value: TextFieldValue, visualTransformation = …)`. It is the API that supports span styling *and* an `OffsetMapping` for hidden characters; the newer `TextFieldState` API does not. Re-verify before "modernising" it.
 - Writing Kotlin through bash heredocs in this environment **eats backslashes** — `'\n'` becomes a literal newline and produces "Incorrect character literal". Use the Write/Edit tools for Kotlin containing escapes.

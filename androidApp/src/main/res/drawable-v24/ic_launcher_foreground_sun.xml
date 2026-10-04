@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Sun Scaled to Fit Adaptive Icon Safe Zone -->
+    <group>
+        <!-- Circle Clip: Center (54, 54), Radius 36 -->
+        <clip-path android:pathData="M 18,54 a 24,24 0 1,0 72,0 a 36,36 0 1,0 -72,0" />
+
+        <!-- Yellow Top Band -->
+        <path android:fillColor="#FFCC4D" android:pathData="M 0,0 H 108 V 43 H 0 Z" />
+        <!-- Orange Mid-Upper Band -->
+        <path android:fillColor="#FFA03A" android:pathData="M 0,43 H 108 V 57 H 0 Z" />
+        <!-- Red-Orange Mid-Lower Band -->
+        <path android:fillColor="#FF633E" android:pathData="M 0,57 H 108 V 71 H 0 Z" />
+        <!-- Pink-Red Bottom Band -->
+        <path android:fillColor="#ED2553" android:pathData="M 0,71 H 108 V 108 H 0 Z" />
+    </group>
+
+</vector>
