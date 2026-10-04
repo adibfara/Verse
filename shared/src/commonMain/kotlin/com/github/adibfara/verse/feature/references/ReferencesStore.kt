@@ -35,7 +35,10 @@ class ReferencesStore(private val fileSystem: SpaceFileSystem) {
 
     suspend fun mintId(path: FilePath): Long = mutex.withLock {
         loadIfNeeded()
-        idForLocked(path) ?: mintIdLocked(path)
+        idForLocked(path)?.let { return@withLock it }
+        val id = mintIdLocked(path)
+        persist()
+        id
     }
 
     suspend fun entries(): Map<String, String> = mutex.withLock {

@@ -44,6 +44,14 @@ class FavoritesRepositoryTest {
     }
 
     @Test
+    fun favoritingSurvivesAFreshRepositoryOnTheSameSpace() = runTest {
+        val fileSystem = fileSystem()
+        FavoritesRepository(fileSystem).toggleFavorite(FilePath("notes/one.md"))
+
+        assertTrue(FavoritesRepository(fileSystem).isFavorite(FilePath("notes/one.md")))
+    }
+
+    @Test
     fun relocatingAFavoritedFileUpdatesItsReference() = runTest {
         val repository = FavoritesRepository(fileSystem())
         val original = FilePath("notes/one.md")
