@@ -153,14 +153,12 @@ fun EditorPane(
             EditorHeader(
                 breadcrumb = state.breadcrumb,
                 mode = state.mode,
-                isDirty = state.isDirty,
                 isFavorite = state.isFavorite,
                 isLocked = state.isLocked,
                 onModeChange = { onEvent(EditorEvent.SetMode(it)) },
                 onRevealInFileManager = onRevealInFileManager,
                 onToggleFavorite = { onEvent(EditorEvent.ToggleFavorite) },
                 onToggleLock = { onEvent(EditorEvent.ToggleLock) },
-                onRenameTitle = { onEvent(EditorEvent.RequestRename(it)) },
                 leading = headerLeading,
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme,
@@ -199,35 +197,46 @@ fun EditorPane(
             VerseDivider()
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when {
-                !state.hasFile -> EmptyEditorPlaceholder()
-                state.kind == FileKind.Image -> ImageViewer(target = state.absolutePath)
-                state.kind == FileKind.Other -> UnsupportedFileCard(
-                    fileName = state.path?.name.orEmpty(),
-                    onOpenInDefaultApplication = onOpenInDefaultApplication,
-                    onRevealInFileManager = onRevealInFileManager,
-                )
-
-                else -> EditorContent(
-                    state = state,
-                    onEvent = onEvent,
-                    onOpenLink = onOpenLink,
-                    focusRequester = focusRequester,
+        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (state.hasFile) {
+                EditorTitleBar(
+                    title = state.breadcrumb.lastOrNull().orEmpty(),
+                    isDirty = state.isDirty,
+                    onRename = { onEvent(EditorEvent.RequestRename(it)) },
                     horizontalPadding = contentHorizontalPadding,
-                    showFormatPopup = showFormatPopup,
-                    readOnly = state.isLocked,
                 )
             }
 
-            if (showFormattingToolbar && state.hasFile && state.kind == FileKind.Markdown && !state.isLocked) {
-                PersistentFormatToolbar(
-                    state = state,
-                    onFormat = { onEvent(EditorEvent.ApplyFormat(it)) },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(VerseTheme.spacing.md),
-                )
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when {
+                    !state.hasFile -> EmptyEditorPlaceholder()
+                    state.kind == FileKind.Image -> ImageViewer(target = state.absolutePath)
+                    state.kind == FileKind.Other -> UnsupportedFileCard(
+                        fileName = state.path?.name.orEmpty(),
+                        onOpenInDefaultApplication = onOpenInDefaultApplication,
+                        onRevealInFileManager = onRevealInFileManager,
+                    )
+
+                    else -> EditorContent(
+                        state = state,
+                        onEvent = onEvent,
+                        onOpenLink = onOpenLink,
+                        focusRequester = focusRequester,
+                        horizontalPadding = contentHorizontalPadding,
+                        showFormatPopup = showFormatPopup,
+                        readOnly = state.isLocked,
+                    )
+                }
+
+                if (showFormattingToolbar && state.hasFile && state.kind == FileKind.Markdown && !state.isLocked) {
+                    PersistentFormatToolbar(
+                        state = state,
+                        onFormat = { onEvent(EditorEvent.ApplyFormat(it)) },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(VerseTheme.spacing.md),
+                    )
+                }
             }
         }
 

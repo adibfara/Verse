@@ -30,6 +30,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import com.github.adibfara.verse.core.designsystem.component.VerseFloatingBar
 import com.github.adibfara.verse.core.designsystem.component.VerseIconButton
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
@@ -42,14 +43,12 @@ import com.github.adibfara.verse.core.model.EditorMode
 fun EditorHeader(
     breadcrumb: List<String>,
     mode: EditorMode,
-    isDirty: Boolean,
     isFavorite: Boolean,
     isLocked: Boolean = false,
     onModeChange: (EditorMode) -> Unit,
     onRevealInFileManager: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleLock: () -> Unit = {},
-    onRenameTitle: (String) -> Unit,
     onOverflowAction: (EditorOverflowAction) -> Unit,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
@@ -72,22 +71,16 @@ fun EditorHeader(
     ) {
         leading?.invoke()
 
-        val titleStyle = if (compactActions) VerseTheme.typography.uiTitle else VerseTheme.typography.uiLabel
+        val pathSegments = if (showBreadcrumbPath) breadcrumb.dropLast(1) else emptyList()
         if (centerBreadcrumb) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Breadcrumb(
-                    segments = if (showBreadcrumbPath) breadcrumb else breadcrumb.takeLast(1),
-                    isDirty = isDirty,
-                    onRenameTitle = onRenameTitle,
-                    titleStyle = titleStyle,
+                    segments = pathSegments,
                 )
             }
         } else {
             Breadcrumb(
-                segments = if (showBreadcrumbPath) breadcrumb else breadcrumb.takeLast(1),
-                isDirty = isDirty,
-                onRenameTitle = onRenameTitle,
-                titleStyle = titleStyle,
+                segments = pathSegments,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -225,9 +218,6 @@ private fun CompactHeaderActions(
 @Composable
 private fun Breadcrumb(
     segments: List<String>,
-    isDirty: Boolean,
-    onRenameTitle: (String) -> Unit,
-    titleStyle: TextStyle,
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
@@ -237,21 +227,13 @@ private fun Breadcrumb(
         horizontalArrangement = Arrangement.spacedBy(VerseTheme.spacing.xs),
     ) {
         segments.forEachIndexed { index, segment ->
-            val isLast = index == segments.lastIndex
-            if (isLast) {
-                EditableTitle(
-                    title = segment,
-                    onRename = onRenameTitle,
-                    style = titleStyle,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                VerseText(
-                    text = segment,
-                    style = VerseTheme.typography.uiLabel,
-                    color = colors.textMuted,
-                    maxLines = 1,
-                )
+            VerseText(
+                text = segment,
+                style = VerseTheme.typography.uiLabel,
+                color = colors.textMuted,
+                maxLines = 1,
+            )
+            if (index != segments.lastIndex) {
                 VerseText(
                     text = "/",
                     style = VerseTheme.typography.uiLabel,
@@ -259,12 +241,45 @@ private fun Breadcrumb(
                 )
             }
         }
-        if (isDirty) {
-            VerseText(
-                text = "•",
-                style = VerseTheme.typography.uiLabel,
-                color = colors.accent,
+    }
+}
+
+@Composable
+fun EditorTitleBar(
+    title: String,
+    isDirty: Boolean,
+    onRename: (String) -> Unit,
+    horizontalPadding: Dp,
+    modifier: Modifier = Modifier,
+) {
+    val colors = VerseTheme.colors
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = VerseTheme.spacing.sm),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier
+                .widthIn(max = VerseTheme.sizes.editorMaxWidth)
+                .fillMaxWidth()
+                .padding(horizontal = horizontalPadding),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VerseTheme.spacing.xs),
+        ) {
+            EditableTitle(
+                title = title,
+                onRename = onRename,
+                style = VerseTheme.typography.noteTitle,
+                modifier = Modifier.weight(1f),
             )
+            if (isDirty) {
+                VerseText(
+                    text = "•",
+                    style = VerseTheme.typography.noteTitle,
+                    color = colors.accent,
+                )
+            }
         }
     }
 }
@@ -283,8 +298,14 @@ private fun EditableTitle(
 
     BasicTextField(
         value = value,
-        onValueChange = { value = it },
-        singleLine = true,
+        onValueChange = { updated ->
+            if (updated.text.contains('\n')) {
+                focusManager.clearFocus()
+            } else {
+                value = updated
+            }
+        },
+        singleLine = false,
         textStyle = style.copy(color = colors.textPrimary),
         cursorBrush = SolidColor(colors.caret),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

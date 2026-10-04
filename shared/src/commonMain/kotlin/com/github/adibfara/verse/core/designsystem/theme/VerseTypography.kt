@@ -13,6 +13,7 @@ data class VerseTypography(
     val uiBody: TextStyle,
     val uiLabel: TextStyle,
     val uiSmall: TextStyle,
+    val noteTitle: TextStyle,
     val tabTitle: TextStyle,
     val treeItem: TextStyle,
     val editorBody: TextStyle,
@@ -57,6 +58,12 @@ fun VerseTypography(editorFontSize: Float = 15.5f, uiScale: Float = 1f): VerseTy
             fontFamily = FontFamily.SansSerif,
             fontSize = 11.5.sp * uiScale,
             fontWeight = FontWeight.Normal,
+        ),
+        noteTitle = TextStyle(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = body * 2.4f,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 1.25.em,
         ),
         tabTitle = TextStyle(
             fontFamily = FontFamily.SansSerif,
