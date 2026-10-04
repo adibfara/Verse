@@ -1,49 +1,57 @@
 package com.github.adibfara.mds.app.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalTextToolbar
 import com.github.adibfara.mds.app.AppUiState
 import com.github.adibfara.mds.core.designsystem.component.MdsDivider
-import com.github.adibfara.mds.core.designsystem.component.MdsIcon
+import com.github.adibfara.mds.core.designsystem.component.MdsFloatingBar
 import com.github.adibfara.mds.core.designsystem.component.MdsIconButton
 import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MdsText
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
+import com.github.adibfara.mds.core.model.RecentSpace
 import com.github.adibfara.mds.core.platform.PlatformBackHandler
 import com.github.adibfara.mds.feature.editor.EditorEvent
 import com.github.adibfara.mds.feature.editor.EditorUiState
 import com.github.adibfara.mds.feature.editor.ui.EditorPane
+import com.github.adibfara.mds.feature.editor.ui.PopupTextToolbar
+import com.github.adibfara.mds.feature.editor.ui.TextToolbarPopup
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerUiState
 import com.github.adibfara.mds.feature.explorer.ui.ExplorerDialogHost
+import com.github.adibfara.mds.feature.explorer.ui.FileActionsBottomSheet
 import com.github.adibfara.mds.feature.tabs.TabsEvent
 import com.github.adibfara.mds.feature.tabs.TabsUiState
 import com.github.adibfara.mds.feature.tabs.ui.TabsGridScreen
 
 private sealed interface MobileScreen {
-    data object FileBrowser : MobileScreen
     data object Note : MobileScreen
     data object TabsGrid : MobileScreen
 }
@@ -66,17 +74,23 @@ fun MobileShell(
     onEditorRequestRename: () -> Unit,
     onEditorRequestMove: () -> Unit,
     onEditorRequestDelete: () -> Unit,
+    onVoiceInput: (() -> Unit)? = null,
+    onCopyPath: (String) -> Unit = {},
+    absolutePathOf: (FilePath) -> String = { "" },
+    onOpenSettings: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    recentSpaces: List<RecentSpace> = emptyList(),
+    onOpenSpace: (RecentSpace) -> Unit = {},
+    onAddSpace: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var browsePath by remember { mutableStateOf(FilePath.Root) }
-    var screen: MobileScreen by remember {
-        mutableStateOf(if (tabsState.activeTab != null) MobileScreen.Note else MobileScreen.FileBrowser)
-    }
-    var previousScreen: MobileScreen by remember { mutableStateOf(MobileScreen.FileBrowser) }
+    var screen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
+    var previousScreen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
     var drawerOpen by remember { mutableStateOf(false) }
 
     fun openFile(node: FileNode) {
         onExplorerEvent(ExplorerEvent.Activate(node))
+        if (node.isDirectory) return
         screen = MobileScreen.Note
         drawerOpen = false
     }
@@ -86,116 +100,157 @@ fun MobileShell(
         screen = MobileScreen.TabsGrid
     }
 
-    val backHandlerEnabled = drawerOpen || screen != MobileScreen.FileBrowser || !browsePath.isRoot
+    val backHandlerEnabled = drawerOpen || screen == MobileScreen.TabsGrid
     PlatformBackHandler(enabled = backHandlerEnabled) {
         when {
             drawerOpen -> drawerOpen = false
             screen == MobileScreen.TabsGrid -> screen = previousScreen
-            screen == MobileScreen.Note -> screen = MobileScreen.FileBrowser
-            else -> browsePath = browsePath.parent ?: FilePath.Root
+            else -> Unit
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().safeContentPadding()) {
-            when (screen) {
-                MobileScreen.Note -> {
-                    MobileTopBar(
-                        title = editorState.path?.nameWithoutExtension.orEmpty(),
-                        canGoBack = true,
-                        isDarkTheme = isDarkTheme,
-                        onBack = { screen = MobileScreen.FileBrowser },
-                        onMenu = null,
-                        onToggleTheme = onToggleTheme,
-                    )
-                    MdsDivider()
-                    EditorPane(
-                        state = editorState,
-                        onEvent = onEditorEvent,
-                        onOpenInDefaultApplication = onOpenInDefaultApplication,
-                        onRevealInFileManager = onOpenInDefaultApplication,
-                        onOpenLink = onOpenLink,
-                        showStatusBar = appState.settings.showStatusBar,
-                        onCopyPath = onEditorCopyPath,
-                        onShare = onEditorShare,
-                        onRequestRename = onEditorRequestRename,
-                        onRequestMove = onEditorRequestMove,
-                        onRequestDelete = onEditorRequestDelete,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    val textToolbar = remember { PopupTextToolbar() }
 
-                MobileScreen.FileBrowser -> {
-                    MobileTopBar(
-                        title = if (browsePath.isRoot) explorerState.spaceName else browsePath.name,
-                        canGoBack = !browsePath.isRoot,
-                        isDarkTheme = isDarkTheme,
-                        onBack = { browsePath = browsePath.parent ?: FilePath.Root },
-                        onMenu = { drawerOpen = true },
-                        onToggleTheme = onToggleTheme,
-                    )
-                    MdsDivider()
-                    FolderList(
-                        nodes = explorerState.rows
-                            .map { it.node }
-                            .filter { it.path.parent?.value == browsePath.value },
-                        onOpenFolder = { node ->
-                            onExplorerEvent(ExplorerEvent.ToggleFolder(node.path))
-                            browsePath = node.path
-                        },
-                        onOpenFile = { node -> openFile(node) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+    CompositionLocalProvider(LocalTextToolbar provides textToolbar) {
+        Box(modifier = modifier.fillMaxSize().background(MdsTheme.colors.sidebar)) {
+            val pushFraction by animateFloatAsState(targetValue = if (drawerOpen) 0.8f else 0f)
 
-                MobileScreen.TabsGrid -> {
-                    MobileTopBar(
-                        title = "Tabs",
-                        canGoBack = true,
-                        isDarkTheme = isDarkTheme,
-                        onBack = { screen = previousScreen },
-                        onMenu = null,
-                        onToggleTheme = onToggleTheme,
-                    )
-                    MdsDivider()
-                    TabsGridScreen(
-                        tabs = tabsState.tabs,
-                        activeTabId = tabsState.activeTabId,
-                        onActivate = { id ->
-                            onTabsEvent(TabsEvent.Activate(id))
-                            screen = MobileScreen.Note
-                        },
-                        onClose = { id -> onTabsEvent(TabsEvent.Close(id)) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-
-            if (screen != MobileScreen.TabsGrid) {
-                MdsDivider()
-                MobileBottomBar(
-                    tabCount = tabsState.tabs.size,
-                    onAdd = {
-                        val parent = browsePath.takeUnless { it.isRoot }
-                        onExplorerEvent(ExplorerEvent.RequestNewNote(parent))
+            if (drawerOpen || pushFraction > 0f) {
+                MobileDrawerPanel(
+                    explorerState = explorerState,
+                    onExplorerEvent = { event ->
+                        if (event is ExplorerEvent.Activate) openFile(event.node) else onExplorerEvent(event)
                     },
-                    onTabs = { openTabsGrid() },
+                    recentSpaces = recentSpaces,
+                    onOpenSpace = { recent ->
+                        drawerOpen = false
+                        onOpenSpace(recent)
+                    },
+                    onAddSpace = {
+                        drawerOpen = false
+                        onAddSpace()
+                    },
+                    onOpenSettings = {
+                        drawerOpen = false
+                        onOpenSettings()
+                    },
+                    modifier = Modifier.fillMaxWidth(0.8f).align(Alignment.CenterStart),
                 )
             }
-        }
 
-        if (drawerOpen) {
-            MobileDrawerOverlay(
-                explorerState = explorerState,
-                onExplorerEvent = { event ->
-                    if (event is ExplorerEvent.Activate) openFile(event.node) else onExplorerEvent(event)
-                },
-                onDismiss = { drawerOpen = false },
-            )
-        }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = size.width * pushFraction },
+            ) {
+                Box(modifier = Modifier.fillMaxSize().background(MdsTheme.colors.surface)) {
+                    Column(modifier = Modifier.fillMaxSize().safeDrawingPadding()) {
+                        when (screen) {
+                            MobileScreen.Note -> {
+                                EditorPane(
+                                    state = editorState,
+                                    onEvent = onEditorEvent,
+                                    onOpenInDefaultApplication = onOpenInDefaultApplication,
+                                    onRevealInFileManager = onOpenInDefaultApplication,
+                                    onOpenLink = onOpenLink,
+                                    showStatusBar = appState.settings.showStatusBar && imeVisible,
+                                    showKeyboardToolbar = imeVisible,
+                                    onCopyPath = onEditorCopyPath,
+                                    onShare = onEditorShare,
+                                    onRequestRename = onEditorRequestRename,
+                                    onRequestMove = onEditorRequestMove,
+                                    onRequestDelete = onEditorRequestDelete,
+                                    headerLeading = {
+                                        MdsFloatingBar {
+                                            MdsIconButton(
+                                                icon = MdsIcons.PanelLeft,
+                                                contentDescription = "Open menu",
+                                                onClick = { drawerOpen = true },
+                                            )
+                                        }
+                                    },
+                                    isDarkTheme = isDarkTheme,
+                                    onToggleTheme = onToggleTheme,
+                                    showBreadcrumbPath = false,
+                                    showRevealAction = false,
+                                    onVoiceInput = onVoiceInput,
+                                    emptyStateTitle = explorerState.spaceName,
+                                    contentHorizontalPadding = MdsTheme.spacing.lg,
+                                    compactHeader = true,
+                                    showFormatPopup = false,
+                                    onOpenSettings = onOpenSettings,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
 
-        explorerState.dialog?.let { dialog ->
-            ExplorerDialogHost(dialog = dialog, onEvent = onExplorerEvent, onChooseFolder = {})
+                            MobileScreen.TabsGrid -> {
+                                MobileTopBar(
+                                    title = "Tabs",
+                                    canGoBack = true,
+                                    isDarkTheme = isDarkTheme,
+                                    onBack = { screen = previousScreen },
+                                    onMenu = null,
+                                    onToggleTheme = onToggleTheme,
+                                )
+                                MdsDivider()
+                                TabsGridScreen(
+                                    tabs = tabsState.tabs,
+                                    activeTabId = tabsState.activeTabId,
+                                    onActivate = { id ->
+                                        onTabsEvent(TabsEvent.Activate(id))
+                                        screen = MobileScreen.Note
+                                    },
+                                    onClose = { id -> onTabsEvent(TabsEvent.Close(id)) },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+
+                    if (screen == MobileScreen.Note && !imeVisible) {
+                        MobileBottomBar(
+                            tabCount = tabsState.tabs.size,
+                            onSearch = onOpenSearch,
+                            onAdd = { onExplorerEvent(ExplorerEvent.RequestNewNote(null)) },
+                            onTabs = { openTabsGrid() },
+                            onMenu = { drawerOpen = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(bottom = MdsTheme.sizes.floatingBarInset),
+                        )
+                    }
+                }
+
+                if (drawerOpen) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MdsTheme.colors.overlay)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { drawerOpen = false },
+                    )
+                }
+            }
+
+            explorerState.dialog?.let { dialog ->
+                ExplorerDialogHost(dialog = dialog, onEvent = onExplorerEvent, onChooseFolder = {})
+            }
+
+            explorerState.contextMenu?.let { target ->
+                FileActionsBottomSheet(
+                    target = target,
+                    onEvent = onExplorerEvent,
+                    onCopyPath = onCopyPath,
+                    absolutePathOf = { absolutePathOf(it.node.path) },
+                    isFavorite = target.node.path in explorerState.favoritedPaths,
+                )
+            }
+
+            TextToolbarPopup(textToolbar)
         }
     }
 }
@@ -243,61 +298,5 @@ private fun MobileTopBar(
             contentDescription = "Toggle theme",
             onClick = onToggleTheme,
         )
-    }
-}
-
-@Composable
-private fun FolderList(
-    nodes: List<FileNode>,
-    onOpenFolder: (FileNode) -> Unit,
-    onOpenFile: (FileNode) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (nodes.isEmpty()) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            MdsText(
-                text = "Nothing here",
-                style = MdsTheme.typography.uiBody,
-                color = MdsTheme.colors.textMuted,
-            )
-        }
-        return
-    }
-
-    LazyColumn(modifier = modifier.fillMaxSize()) {
-        items(items = nodes, key = { it.path.value }) { node ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        if (node.isDirectory) onOpenFolder(node) else onOpenFile(node)
-                    }
-                    .padding(horizontal = MdsTheme.spacing.lg, vertical = MdsTheme.spacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MdsTheme.spacing.md),
-            ) {
-                Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                    MdsIcon(
-                        icon = if (node.isDirectory) MdsIcons.Folder else MdsIcons.FileText,
-                        contentDescription = null,
-                        tint = MdsTheme.colors.textMuted,
-                    )
-                }
-                MdsText(
-                    text = if (node.isDirectory) node.name else node.path.nameWithoutExtension,
-                    modifier = Modifier.weight(1f),
-                    style = MdsTheme.typography.uiBody,
-                    color = MdsTheme.colors.textPrimary,
-                    maxLines = 1,
-                )
-                if (node.isDirectory) {
-                    MdsIcon(
-                        icon = MdsIcons.ChevronRight,
-                        contentDescription = null,
-                        tint = MdsTheme.colors.textMuted,
-                    )
-                }
-            }
-        }
     }
 }

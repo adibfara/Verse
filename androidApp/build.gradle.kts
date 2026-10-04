@@ -1,10 +1,16 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+import java.util.Properties
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
 }
-
+val keystorePropsFile = rootProject.file("keystore.properties")
+val keystoreProps = Properties().apply {
+    if (keystorePropsFile.exists()) {
+        load(keystorePropsFile.inputStream())
+    }
+}
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
@@ -22,7 +28,14 @@ dependencies {
 android {
     namespace = "com.github.adibfara.mds"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
-
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("dummy-release.jks")
+            storePassword = "dummy123"
+            keyAlias = "dummy"
+            keyPassword = "dummy123"
+        }
+    }
     defaultConfig {
         applicationId = "com.github.adibfara.mds"
         minSdk = libs.versions.android.minSdk.get().toInt()
@@ -36,8 +49,10 @@ android {
         }
     }
     buildTypes {
-        release {
-            isMinifyEnabled = false
+      release {
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+          isShrinkResources=true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

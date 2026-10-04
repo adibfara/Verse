@@ -1,6 +1,7 @@
 package com.github.adibfara.mds.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +51,7 @@ fun DesktopShell(
     onToggleSidebar: () -> Unit,
     onResizeSidebar: (Float) -> Unit,
     onToggleTheme: () -> Unit,
+    onToggleFormattingToolbar: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenQuickOpen: () -> Unit,
     onOpenInDefaultApplication: () -> Unit,
@@ -65,16 +67,23 @@ fun DesktopShell(
     modifier: Modifier = Modifier,
 ) {
     val colors = MdsTheme.colors
+    val windowShapeModifier = if (windowChrome != null) {
+        Modifier.clip(MdsTheme.shapes.window)
+    } else {
+        Modifier
+    }
 
-    Box(modifier = modifier.fillMaxSize().background(colors.window)) {
+    Box(modifier = modifier.fillMaxSize().then(windowShapeModifier).background(colors.window)) {
         Column(modifier = Modifier.fillMaxSize()) {
             TopBar(
                 tabsState = tabsState,
                 isDark = isDarkTheme,
+                showFormattingToolbar = appState.settings.showFormattingToolbar,
                 windowChrome = windowChrome,
                 onTabsEvent = onTabsEvent,
                 onToggleSidebar = onToggleSidebar,
                 onToggleTheme = onToggleTheme,
+                onToggleFormattingToolbar = onToggleFormattingToolbar,
                 onOpenSettings = onOpenSettings,
                 onOpenQuickOpen = onOpenQuickOpen,
             )
@@ -105,6 +114,8 @@ fun DesktopShell(
                     onRevealInFileManager = onRevealInFileManager,
                     onOpenLink = onOpenLink,
                     showStatusBar = appState.settings.showStatusBar,
+                    showFormattingToolbar = appState.settings.showFormattingToolbar,
+                    centerBreadcrumb = true,
                     onCopyPath = onEditorCopyPath,
                     onShare = onEditorShare,
                     onRequestRename = onEditorRequestRename,
@@ -121,6 +132,7 @@ fun DesktopShell(
                 onEvent = onExplorerEvent,
                 onCopyPath = onCopyPath,
                 absolutePathOf = { absolutePathOf(it.node.path) },
+                isFavorite = target.node.path in explorerState.favoritedPaths,
             )
         }
 
@@ -138,10 +150,12 @@ fun DesktopShell(
 private fun TopBar(
     tabsState: TabsUiState,
     isDark: Boolean,
+    showFormattingToolbar: Boolean,
     windowChrome: WindowChrome?,
     onTabsEvent: (TabsEvent) -> Unit,
     onToggleSidebar: () -> Unit,
     onToggleTheme: () -> Unit,
+    onToggleFormattingToolbar: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenQuickOpen: () -> Unit,
 ) {
@@ -175,6 +189,12 @@ private fun TopBar(
             icon = if (isDark) MdsIcons.Sun else MdsIcons.Moon,
             contentDescription = "Toggle theme",
             onClick = onToggleTheme,
+        )
+        MdsIconButton(
+            icon = MdsIcons.TextFormat,
+            contentDescription = "Toggle formatting toolbar",
+            onClick = onToggleFormattingToolbar,
+            selected = showFormattingToolbar,
         )
         MdsIconButton(
             icon = MdsIcons.Sliders,

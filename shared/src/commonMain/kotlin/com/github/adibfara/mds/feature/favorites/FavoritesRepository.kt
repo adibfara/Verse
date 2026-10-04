@@ -2,6 +2,9 @@ package com.github.adibfara.mds.feature.favorites
 
 import com.github.adibfara.mds.core.filesystem.SpaceFileSystem
 import com.github.adibfara.mds.core.model.FilePath
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -32,6 +35,9 @@ class FavoritesRepository(private val fileSystem: SpaceFileSystem) {
     private val mutex = Mutex()
     private var favorites: FavoritesDocument? = null
     private var references: ReferencesDocument? = null
+
+    private val mutablePaths = MutableStateFlow<Set<FilePath>>(emptySet())
+    val paths: StateFlow<Set<FilePath>> = mutablePaths.asStateFlow()
 
     suspend fun isFavorite(path: FilePath): Boolean = mutex.withLock {
         loadIfNeeded()
@@ -117,9 +123,20 @@ class FavoritesRepository(private val fileSystem: SpaceFileSystem) {
         references = runCatching {
             FavoritesJson.decodeFromString<ReferencesDocument>(fileSystem.readText(ReferencesPath))
         }.getOrDefault(ReferencesDocument())
+        publishLocked()
+    }
+
+    private fun publishLocked() {
+        val favs = requireFavorites()
+        val refs = requireReferences()
+        mutablePaths.value = favs.ids
+            .mapNotNull { id -> refs.entries[id.toString()] }
+            .map(::FilePath)
+            .toSet()
     }
 
     private suspend fun persist() {
+        publishLocked()
         val favoritesDoc = favorites ?: return
         val referencesDoc = references ?: return
         runCatching {

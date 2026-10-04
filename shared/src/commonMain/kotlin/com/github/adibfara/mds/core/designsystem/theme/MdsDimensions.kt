@@ -24,6 +24,7 @@ data class MdsShapes(
     val medium: Shape = RoundedCornerShape(6.dp),
     val large: Shape = RoundedCornerShape(10.dp),
     val round: Shape = RoundedCornerShape(50),
+    val window: Shape = RoundedCornerShape(12.dp),
 )
 
 @Immutable
@@ -48,4 +49,43 @@ data class MdsSizes(
     val bottomBarHeight: Dp = 56.dp,
     val mobileTopBarHeight: Dp = 56.dp,
     val editorBottomPadding: Dp = 160.dp,
+    val floatingBarHeight: Dp = 44.dp,
+    val floatingBarInset: Dp = 10.dp,
+    val badgeMinWidth: Dp = 24.dp,
+    val dialogMinWidth: Dp = 380.dp,
+    val dialogMaxWidth: Dp = 560.dp,
+    val searchPanelWidth: Dp = 720.dp,
+    val searchResultsHeight: Dp = 420.dp,
+)
+
+const val MobileUiScale: Float = 1.2f
+
+fun mobileSpacing(): MdsSpacing = MdsSpacing(
+    xxs = 3.dp,
+    xs = 6.dp,
+    sm = 10.dp,
+    md = 14.dp,
+    lg = 18.dp,
+    xl = 24.dp,
+    xxl = 32.dp,
+)
+
+fun mobileSizes(): MdsSizes = MdsSizes(
+    iconSmall = 16.dp,
+    icon = 20.dp,
+    iconLarge = 24.dp,
+    iconButton = 40.dp,
+    iconButtonSmall = 34.dp,
+    rowHeight = 44.dp,
+    tabHeight = 40.dp,
+    toolbarHeight = 52.dp,
+    statusBarHeight = 30.dp,
+    indentStep = 18.dp,
+    bottomBarHeight = 56.dp,
+    mobileTopBarHeight = 64.dp,
+    editorBottomPadding = 120.dp,
+    floatingBarHeight = 52.dp,
+    floatingBarInset = 12.dp,
+    badgeMinWidth = 28.dp,
+    dialogMinWidth = 260.dp,
 )

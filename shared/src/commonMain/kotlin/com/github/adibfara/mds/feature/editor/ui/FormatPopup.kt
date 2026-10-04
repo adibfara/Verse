@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -27,7 +26,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -62,24 +63,22 @@ internal data class FormatPopupState(
     val formats: Set<InlineFormat>,
     val headingLevel: Int,
     val lineMarker: LineMarkerKind,
+    val sourceText: String = "",
+    val isLink: Boolean = false,
 )
 
 @Composable
 internal fun FormatPopup(
     state: FormatPopupState,
-    onHoverChange: (Boolean) -> Unit,
     onAction: (FormatAction) -> Unit,
 ) {
     val gap = with(LocalDensity.current) { MdsTheme.spacing.xs.roundToPx() }
     val provider = remember(state.anchor, gap) { AnchorPositionProvider(state.anchor, gap) }
     val interactionSource = remember { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
     val appearance = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         appearance.animateTo(1f, tween(durationMillis = PopupFadeMillis))
     }
-    LaunchedEffect(hovered) { onHoverChange(hovered) }
-    DisposableEffect(Unit) { onDispose { onHoverChange(false) } }
 
     Popup(
         popupPositionProvider = provider,
@@ -105,8 +104,9 @@ internal fun FormatPopup(
 }
 
 @Composable
-private fun InlineFormatButtons(state: FormatPopupState, onAction: (FormatAction) -> Unit) {
+internal fun InlineFormatButtons(state: FormatPopupState, onAction: (FormatAction) -> Unit) {
     val typography = MdsTheme.typography
+    val clipboard = LocalClipboardManager.current
     FormatButton(
         selected = InlineFormat.Bold in state.formats,
         onClick = { onAction(FormatAction.ToggleInline(state.range, InlineFormat.Bold)) },
@@ -151,16 +151,38 @@ private fun InlineFormatButtons(state: FormatPopupState, onAction: (FormatAction
             size = MdsTheme.sizes.iconSmall,
         )
     }
+    FormatButton(
+        selected = state.isLink,
+        onClick = { onAction(FormatAction.ToggleLink(state.range)) },
+    ) { color ->
+        MdsIcon(
+            icon = MdsIcons.Link,
+            contentDescription = "Link",
+            tint = color,
+            size = MdsTheme.sizes.iconSmall,
+        )
+    }
+
+    PopupSeparator()
+
+    FormatButton(
+        selected = false,
+        onClick = { clipboard.setText(AnnotatedString(state.sourceText)) },
+    ) { color ->
+        MdsIcon(
+            icon = MdsIcons.Copy,
+            contentDescription = "Copy",
+            tint = color,
+            size = MdsTheme.sizes.iconSmall,
+        )
+    }
 
     PopupSeparator()
 
     (1..3).forEach { level ->
-        val active = state.headingLevel == level
         FormatButton(
-            selected = active,
-            onClick = {
-                onAction(FormatAction.SetHeading(state.range.start, if (active) 0 else level))
-            },
+            selected = state.headingLevel == level,
+            onClick = { onAction(FormatAction.SetHeading(state.range.start, level)) },
         ) { color ->
             MdsText(
                 text = "H$level",
@@ -249,12 +271,8 @@ private fun FormatButton(
     val hovered by interactionSource.collectIsHoveredAsState()
     val currentClick = rememberUpdatedState(onClick)
     val colors = MdsTheme.colors
-    val background = when {
-        selected -> colors.surfaceSelected
-        hovered -> colors.surfaceHover
-        else -> Color.Transparent
-    }
-    val contentColor = if (selected) colors.textPrimary else colors.textSecondary
+    val background = if (hovered) colors.surfaceHover else Color.Transparent
+    val contentColor = if (selected) colors.accent else colors.textSecondary
     Box(
         modifier = Modifier
             .size(MdsTheme.sizes.iconButtonSmall)
@@ -269,7 +287,7 @@ private fun FormatButton(
     }
 }
 
-private class AnchorPositionProvider(
+internal class AnchorPositionProvider(
     private val anchor: Rect,
     private val gap: Int,
 ) : PopupPositionProvider {

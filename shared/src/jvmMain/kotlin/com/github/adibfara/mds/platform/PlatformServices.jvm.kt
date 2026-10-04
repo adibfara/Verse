@@ -101,6 +101,11 @@ private class JvmStoragePermission : StoragePermission {
     override suspend fun request(): Boolean = true
 }
 
+private class JvmSpeechRecognition : SpeechRecognition {
+    override val isSupported: Boolean = false
+    override suspend fun recognizeSpeech(): String? = null
+}
+
 actual fun createSystemOpener(): SystemOpener = JvmSystemOpener()
 
 actual fun createAppPaths(): AppPaths = JvmAppPaths()
@@ -109,10 +114,15 @@ actual fun createLocationPicker(): LocationPicker = JvmLocationPicker()
 
 actual fun createStoragePermission(): StoragePermission = JvmStoragePermission()
 
+actual fun createSpeechRecognition(): SpeechRecognition = JvmSpeechRecognition()
+
 actual fun currentPlatformKind(): PlatformKind = PlatformKind.Desktop
 
 @Composable
 actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = Unit
+
+@Composable
+actual fun PlatformStatusBarStyle(isDarkTheme: Boolean) = Unit
 
 @Composable
 actual fun PlatformFolderPickerOverlay() = Unit

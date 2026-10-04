@@ -19,7 +19,11 @@ class MarkdownStyles(
     private val typography: MdsTypography,
 ) {
 
-    fun spanFor(kind: StyleKind): SpanStyle = when (kind) {
+    private val spans: List<SpanStyle> = StyleKind.entries.map(::buildSpan)
+
+    fun spanFor(kind: StyleKind): SpanStyle = spans[kind.ordinal]
+
+    private fun buildSpan(kind: StyleKind): SpanStyle = when (kind) {
         StyleKind.Heading1 -> headingSpan(1)
         StyleKind.Heading2 -> headingSpan(2)
         StyleKind.Heading3 -> headingSpan(3)
@@ -60,6 +64,17 @@ class MarkdownStyles(
         StyleKind.TaskText -> SpanStyle(
             color = colors.textMuted,
             textDecoration = TextDecoration.LineThrough,
+        )
+
+        StyleKind.Table -> SpanStyle(
+            fontFamily = FontFamily.Monospace,
+            color = colors.textPrimary,
+        )
+
+        StyleKind.TableHeader -> SpanStyle(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            color = colors.textPrimary,
         )
     }
 

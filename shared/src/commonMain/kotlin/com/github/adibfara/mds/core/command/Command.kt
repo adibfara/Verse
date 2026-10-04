@@ -168,6 +168,12 @@ object Commands {
         category = CommandCategory.View,
     )
 
+    val ToggleFormattingToolbar = Command(
+        id = CommandId("view.toggleFormattingToolbar"),
+        title = "Toggle formatting toolbar",
+        category = CommandCategory.View,
+    )
+
     val OpenSettings = Command(
         id = CommandId("workspace.openSettings"),
         title = "Open settings",
@@ -221,6 +227,7 @@ object Commands {
         ToggleRawMode,
         ToggleSidebar,
         ToggleTheme,
+        ToggleFormattingToolbar,
         OpenSettings,
         CloseSpace,
     ) + jumpToTab

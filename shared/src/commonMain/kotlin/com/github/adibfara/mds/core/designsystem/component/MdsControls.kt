@@ -15,9 +15,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -157,14 +160,22 @@ fun MdsDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
             modifier = modifier
-                .widthIn(min = 380.dp, max = 560.dp)
+                .safeDrawingPadding()
+                .padding(MdsTheme.spacing.lg)
+                .widthIn(min = MdsTheme.sizes.dialogMinWidth, max = MdsTheme.sizes.dialogMaxWidth)
                 .background(colors.surfaceRaised, MdsTheme.shapes.large)
                 .border(MdsTheme.sizes.borderWidth, colors.border, MdsTheme.shapes.large)
                 .padding(MdsTheme.spacing.xl),
             verticalArrangement = Arrangement.spacedBy(MdsTheme.spacing.lg),
         ) {
             MdsText(text = title, style = MdsTheme.typography.uiTitle, color = colors.textPrimary)
-            content()
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                content()
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(MdsTheme.spacing.sm, Alignment.End),

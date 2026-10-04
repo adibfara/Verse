@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,7 +41,7 @@ fun SpacePickerScreen(
 ) {
     val colors = MdsTheme.colors
     Box(
-        modifier = modifier.fillMaxSize().background(colors.window),
+        modifier = modifier.fillMaxSize().background(colors.window).safeDrawingPadding(),
         contentAlignment = Alignment.Center,
     ) {
         Column(

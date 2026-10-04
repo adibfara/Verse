@@ -5,28 +5,24 @@ data class MaskEdit(val range: MdRange, val replacement: String)
 class MarkerMask(
     val originalText: String,
     val transformedText: String,
-    private val originalToTransformedIndex: IntArray,
-    private val transformedToOriginalIndex: IntArray,
+    private val originalToTransformedIndex: IntArray?,
+    private val transformedToOriginalIndex: IntArray?,
 ) {
 
-    val isIdentity: Boolean get() = originalText == transformedText
+    val isIdentity: Boolean get() = originalToTransformedIndex == null
 
     fun originalToTransformed(offset: Int): Int {
         val clamped = offset.coerceIn(0, originalText.length)
-        return originalToTransformedIndex[clamped]
+        return originalToTransformedIndex?.get(clamped) ?: clamped
     }
 
     fun transformedToOriginal(offset: Int): Int {
         val clamped = offset.coerceIn(0, transformedText.length)
-        return transformedToOriginalIndex[clamped]
+        return transformedToOriginalIndex?.get(clamped) ?: clamped
     }
 
     companion object {
-        fun identity(text: String): MarkerMask {
-            val forward = IntArray(text.length + 1) { it }
-            val backward = IntArray(text.length + 1) { it }
-            return MarkerMask(text, text, forward, backward)
-        }
+        fun identity(text: String): MarkerMask = MarkerMask(text, text, null, null)
     }
 }
 
@@ -64,12 +60,21 @@ fun normalizeRanges(ranges: List<MdRange>, limit: Int): List<MdRange> {
     return merged
 }
 
-private fun normalizeEdits(edits: List<MaskEdit>, limit: Int): List<MaskEdit> {
+private fun normalizeEdits(
+    edits: List<MaskEdit>,
+    limit: Int,
+    revealedLine: MdRange?,
+): List<MaskEdit> {
     val sanitized = edits
         .mapNotNull { edit ->
+            if (revealedLine != null && edit.range.overlaps(revealedLine)) return@mapNotNull null
             val start = edit.range.start.coerceIn(0, limit)
             val end = edit.range.end.coerceIn(0, limit)
-            if (end > start) MaskEdit(MdRange(start, end), edit.replacement) else null
+            when {
+                end <= start -> null
+                start == edit.range.start && end == edit.range.end -> edit
+                else -> MaskEdit(MdRange(start, end), edit.replacement)
+            }
         }
         .sortedWith(compareBy({ it.range.start }, { -it.range.end }))
 
@@ -99,48 +104,61 @@ fun buildMaskedText(
     edits: List<MaskEdit>,
     revealedLine: MdRange? = null,
 ): MarkerMask {
-    val candidates = edits.filterNot { edit ->
-        revealedLine != null && edit.range.overlaps(revealedLine)
-    }
-    val applied = normalizeEdits(candidates, text.length)
+    val applied = normalizeEdits(edits, text.length, revealedLine)
     if (applied.isEmpty()) return MarkerMask.identity(text)
 
     val length = text.length
-    val forward = IntArray(length + 1)
-    val backward = ArrayList<Int>(length + 1)
-    val builder = StringBuilder(length)
-
-    var position = 0
+    var transformedLength = length
     applied.forEach { edit ->
-        while (position < edit.range.start) {
-            forward[position] = builder.length
-            backward.add(position)
-            builder.append(text[position])
-            position++
+        transformedLength += edit.replacement.length - edit.range.length
+    }
+
+    val forward = IntArray(length + 1)
+    val backward = IntArray(transformedLength + 1)
+    val builder = StringBuilder(transformedLength)
+    var written = 0
+    var position = 0
+
+    applied.forEach { edit ->
+        val keepEnd = edit.range.start
+        if (position < keepEnd) {
+            builder.appendRange(text, position, keepEnd)
+            while (position < keepEnd) {
+                forward[position] = written
+                backward[written] = position
+                written++
+                position++
+            }
         }
-        val transformedStart = builder.length
-        edit.replacement.forEach { character ->
-            backward.add(edit.range.start)
-            builder.append(character)
+        val transformedStart = written
+        if (edit.replacement.isNotEmpty()) {
+            builder.append(edit.replacement)
+            repeat(edit.replacement.length) {
+                backward[written] = edit.range.start
+                written++
+            }
         }
         while (position < edit.range.end) {
             forward[position] = transformedStart
             position++
         }
     }
-    while (position < length) {
-        forward[position] = builder.length
-        backward.add(position)
-        builder.append(text[position])
-        position++
+    if (position < length) {
+        builder.appendRange(text, position, length)
+        while (position < length) {
+            forward[position] = written
+            backward[written] = position
+            written++
+            position++
+        }
     }
-    forward[length] = builder.length
-    backward.add(length)
+    forward[length] = written
+    backward[written] = length
 
     return MarkerMask(
         originalText = text,
         transformedText = builder.toString(),
         originalToTransformedIndex = forward,
-        transformedToOriginalIndex = backward.toIntArray(),
+        transformedToOriginalIndex = backward,
     )
 }

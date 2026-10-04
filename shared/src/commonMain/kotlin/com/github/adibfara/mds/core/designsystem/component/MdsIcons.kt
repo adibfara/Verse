@@ -27,6 +27,24 @@ private fun strokeIcon(name: String, build: PathBuilder.() -> Unit): ImageVector
         )
     }.build()
 
+private fun filledIcon(name: String, build: PathBuilder.() -> Unit): ImageVector =
+    ImageVector.Builder(
+        name = name,
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f,
+    ).apply {
+        path(
+            fill = SolidColor(Color.Black),
+            stroke = SolidColor(Color.Black),
+            strokeLineWidth = 1.9f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round,
+            pathBuilder = build,
+        )
+    }.build()
+
 private fun PathBuilder.segment(fromX: Float, fromY: Float, toX: Float, toY: Float) {
     moveTo(fromX, fromY)
     lineTo(toX, toY)
@@ -377,6 +395,33 @@ object MdsIcons {
         close()
     } }
 
+    val HeartFilled: ImageVector by lazy { filledIcon("HeartFilled") {
+        moveTo(12f, 20f)
+        lineTo(4.5f, 12.6f)
+        curveTo(2.6f, 10.7f, 2.6f, 7.6f, 4.5f, 5.8f)
+        curveTo(6.3f, 4f, 9.2f, 4f, 11f, 5.8f)
+        lineTo(12f, 6.8f)
+        lineTo(13f, 5.8f)
+        curveTo(14.8f, 4f, 17.7f, 4f, 19.5f, 5.8f)
+        curveTo(21.4f, 7.6f, 21.4f, 10.7f, 19.5f, 12.6f)
+        close()
+    } }
+
+    val Link: ImageVector by lazy { strokeIcon("Link") {
+        moveTo(10.6f, 13.4f)
+        curveTo(11.6f, 14.4f, 13.2f, 14.4f, 14.2f, 13.4f)
+        lineTo(17.8f, 9.8f)
+        curveTo(18.8f, 8.8f, 18.8f, 7.2f, 17.8f, 6.2f)
+        curveTo(16.8f, 5.2f, 15.2f, 5.2f, 14.2f, 6.2f)
+        lineTo(13.2f, 7.2f)
+        moveTo(13.4f, 10.6f)
+        curveTo(12.4f, 9.6f, 10.8f, 9.6f, 9.8f, 10.6f)
+        lineTo(6.2f, 14.2f)
+        curveTo(5.2f, 15.2f, 5.2f, 16.8f, 6.2f, 17.8f)
+        curveTo(7.2f, 18.8f, 8.8f, 18.8f, 9.8f, 17.8f)
+        lineTo(10.8f, 16.8f)
+    } }
+
     val Columns: ImageVector by lazy { strokeIcon("Columns") {
         moveTo(4f, 4f)
         lineTo(20f, 4f)
@@ -412,6 +457,19 @@ object MdsIcons {
         circle(18f, 19f, 2.5f)
         segment(8.2f, 10.8f, 15.8f, 6.2f)
         segment(8.2f, 13.2f, 15.8f, 17.8f)
+    } }
+
+    val TextFormat: ImageVector by lazy { strokeIcon("TextFormat") {
+        moveTo(6f, 5f)
+        lineTo(6f, 19f)
+        moveTo(6f, 5f)
+        lineTo(10.5f, 5f)
+        curveTo(12.5f, 5f, 12.5f, 11.5f, 10.5f, 11.5f)
+        lineTo(6f, 11.5f)
+        moveTo(6f, 11.5f)
+        lineTo(11.5f, 11.5f)
+        curveTo(13.8f, 11.5f, 13.8f, 19f, 11.5f, 19f)
+        lineTo(6f, 19f)
     } }
 
     val Mic: ImageVector by lazy { strokeIcon("Mic") {

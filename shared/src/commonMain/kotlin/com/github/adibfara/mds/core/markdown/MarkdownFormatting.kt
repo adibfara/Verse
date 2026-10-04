@@ -23,14 +23,23 @@ sealed interface FormatAction {
 
     data class SetLineMarker(val offset: Int, val kind: LineMarkerKind) : FormatAction
 
+    data class ToggleLink(val range: MdRange) : FormatAction
+
     data object ContinueList : FormatAction
 }
 
 fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): TextEdit {
+    if (action is FormatAction.ToggleInline && action.range.length == 0) {
+        return collapsedInlineEdit(text, action.range.start, action.format)
+    }
+    if (action is FormatAction.ToggleLink) {
+        return linkEdit(text, action.range)
+    }
     val splices = when (action) {
         is FormatAction.ToggleInline -> inlineSplices(text, action.range, action.format)
         is FormatAction.SetHeading -> headingSplices(text, action.offset, action.level)
         is FormatAction.SetLineMarker -> lineMarkerSplices(text, action.offset, action.kind)
+        is FormatAction.ToggleLink -> emptyList()
         FormatAction.ContinueList -> if (selection.start == selection.end) {
             continuationSplices(text, selection.start)
         } else {
@@ -42,6 +51,68 @@ fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): T
 
 fun hasListContinuation(text: String, caretOffset: Int): Boolean =
     continuationSplices(text, caretOffset).isNotEmpty()
+
+fun inlineLinkAt(text: String, offset: Int): MdRange? {
+    val caret = offset.coerceIn(0, text.length)
+    var open = -1
+    var index = caret
+    while (index > 0) {
+        index--
+        if (text[index] == '\n') return null
+        if (text[index] == '[') {
+            open = index
+            break
+        }
+    }
+    if (open < 0) return null
+    val close = text.indexOf("](", startIndex = open)
+    if (close < 0 || close >= text.length) return null
+    val end = text.indexOf(')', startIndex = close + 2)
+    if (end < 0) return null
+    if (text.substring(open, end).contains('\n')) return null
+    if (caret > end + 1) return null
+    return MdRange(open, end + 1)
+}
+
+private fun linkEdit(text: String, range: MdRange): TextEdit {
+    val start = range.start.coerceIn(0, text.length)
+    val end = range.end.coerceIn(start, text.length)
+
+    val existing = inlineLinkAt(text, start)
+    if (existing != null) {
+        val labelEnd = text.indexOf("](", startIndex = existing.start)
+        val label = text.substring(existing.start + 1, labelEnd)
+        return TextEdit(
+            text.replaceRange(existing.start, existing.end, label),
+            MdRange(existing.start + label.length, existing.start + label.length),
+        )
+    }
+
+    val label = text.substring(start, end)
+    val replacement = "[$label]()"
+    val caret = if (label.isEmpty()) start + 1 else start + replacement.length - 1
+    return TextEdit(text.replaceRange(start, end, replacement), MdRange(caret, caret))
+}
+
+private fun collapsedInlineEdit(text: String, offset: Int, format: InlineFormat): TextEdit {
+    val caret = offset.coerceIn(0, text.length)
+    val marker = format.marker
+    val character = marker[0]
+    val width = marker.length
+    val opening = runBackward(text, caret, character)
+    val closing = runForward(text, caret, character)
+
+    if (opening == width && closing == width) {
+        val landing = caret - width
+        return TextEdit(text.removeRange(landing, caret + width), MdRange(landing, landing))
+    }
+    if (closing == width) {
+        val landing = caret + width
+        return TextEdit(text, MdRange(landing, landing))
+    }
+    val landing = caret + width
+    return TextEdit(text.replaceRange(caret, caret, marker + marker), MdRange(landing, landing))
+}
 
 private fun inlineSplices(text: String, range: MdRange, format: InlineFormat): List<Splice> {
     val start = range.start.coerceIn(0, text.length)
@@ -67,63 +138,98 @@ private fun headingSplices(text: String, offset: Int, level: Int): List<Splice> 
     if (hashEnd > indentEnd) {
         while (contentStart < line.end && text[contentStart] == ' ') contentStart++
     }
-    val prefix = if (level <= 0) "" else "#".repeat(level.coerceAtMost(6)) + " "
+    val currentLevel = hashEnd - indentEnd
+    val target = if (level in 1..6 && currentLevel == level) 0 else level
+    val prefix = if (target <= 0) "" else "#".repeat(target.coerceAtMost(6)) + " "
     return listOf(Splice(indentEnd, contentStart, prefix))
 }
 
-private fun lineMarkerSplices(text: String, offset: Int, kind: LineMarkerKind): List<Splice> {
+private fun lineMarkerSplices(text: String, offset: Int, requested: LineMarkerKind): List<Splice> {
     val line = lineRangeAt(text, offset)
+    val current = lineMarkerKindAt(text, line.start)
+    val kind = if (requested != LineMarkerKind.None && current == requested) {
+        LineMarkerKind.None
+    } else {
+        requested
+    }
+    if (current == LineMarkerKind.None) {
+        return listOf(lineMarkerSplice(text, line, kind, orderedNumber = null, orderedSeparator = '.'))
+    }
+
+    val block = listBlockRange(text, line)
+    val blockLines = buildList {
+        var cursor = block.start
+        while (cursor <= block.end) {
+            val currentLine = lineRangeAt(text, cursor)
+            add(currentLine)
+            cursor = currentLine.end + 1
+        }
+    }
+
+    if (kind == LineMarkerKind.Ordered) {
+        val alreadyAllOrdered = blockLines.all { lineMarkerKindAt(text, it.start) == LineMarkerKind.Ordered }
+        if (alreadyAllOrdered) return emptyList()
+        val separator = blockLines
+            .map { scanLinePrefix(text, it) }
+            .firstOrNull { isOrderedMarker(it.marker) }
+            ?.marker?.last() ?: '.'
+        return blockLines.mapIndexed { index, currentLine ->
+            lineMarkerSplice(text, currentLine, kind, orderedNumber = index + 1, orderedSeparator = separator)
+        }
+    }
+
+    return blockLines.map { currentLine ->
+        lineMarkerSplice(text, currentLine, kind, orderedNumber = null, orderedSeparator = '.')
+    }
+}
+
+private fun listBlockRange(text: String, line: MdRange): MdRange {
+    var blockStart = line.start
+    while (blockStart > 0) {
+        val previousLine = lineRangeAt(text, blockStart - 1)
+        if (lineMarkerKindAt(text, previousLine.start) == LineMarkerKind.None) break
+        blockStart = previousLine.start
+    }
+    var blockEnd = line.end
+    while (blockEnd < text.length) {
+        val nextLine = lineRangeAt(text, blockEnd + 1)
+        if (lineMarkerKindAt(text, nextLine.start) == LineMarkerKind.None) break
+        blockEnd = nextLine.end
+    }
+    return MdRange(blockStart, blockEnd)
+}
+
+private fun lineMarkerSplice(
+    text: String,
+    line: MdRange,
+    kind: LineMarkerKind,
+    orderedNumber: Int?,
+    orderedSeparator: Char,
+): Splice {
     val scan = scanLinePrefix(text, line)
-    val bullet = scan.marker.ifEmpty { "-" }
+    val bullet = if (scan.marker.isEmpty() || (scan.checkBox == null && isOrderedMarker(scan.marker))) {
+        "-"
+    } else {
+        scan.marker
+    }
     val checkBox = scan.checkBox ?: ' '
     val prefix = when (kind) {
         LineMarkerKind.None -> ""
         LineMarkerKind.Bullet -> "$bullet "
         LineMarkerKind.Task -> "$bullet [$checkBox] "
-        LineMarkerKind.Ordered -> orderedMarkerPrefix(text, line, scan)
+        LineMarkerKind.Ordered -> {
+            val number = orderedNumber ?: 1
+            if (scan.checkBox != null) {
+                "$number$orderedSeparator [${scan.checkBox}] "
+            } else {
+                "$number$orderedSeparator "
+            }
+        }
     }
-    return listOf(Splice(scan.indentEnd, scan.contentStart, prefix))
+    return Splice(scan.indentEnd, scan.contentStart, prefix)
 }
 
 private fun isOrderedMarker(marker: String): Boolean = marker.isNotEmpty() && marker.first().isDigit()
-
-private fun orderedMarkerPrefix(text: String, line: MdRange, scan: LinePrefixScan): String {
-    val number: Int
-    val separator: Char
-    if (isOrderedMarker(scan.marker)) {
-        number = scan.marker.takeWhile { it.isDigit() }.toIntOrNull() ?: 1
-        separator = scan.marker.last()
-    } else {
-        val indent = scan.indentEnd - line.start
-        number = (previousOrderedSiblingNumber(text, line, indent) ?: 0) + 1
-        separator = '.'
-    }
-    val checkBox = scan.checkBox
-    return if (checkBox != null) "$number$separator [$checkBox] " else "$number$separator "
-}
-
-private fun previousOrderedSiblingNumber(text: String, line: MdRange, indent: Int): Int? {
-    var cursor = line.start - 1
-    while (cursor >= 0) {
-        val priorLine = lineRangeAt(text, cursor)
-        if (priorLine.start >= priorLine.end) return null
-        val priorScan = scanLinePrefix(text, priorLine)
-        val priorIndent = priorScan.indentEnd - priorLine.start
-        when {
-            priorIndent < indent -> return null
-            priorIndent == indent -> {
-                return if (isOrderedMarker(priorScan.marker)) {
-                    priorScan.marker.takeWhile { it.isDigit() }.toIntOrNull()
-                } else {
-                    null
-                }
-            }
-
-            else -> cursor = priorLine.start - 1
-        }
-    }
-    return null
-}
 
 fun lineMarkerKindAt(text: String, offset: Int): LineMarkerKind {
     val scan = scanLinePrefix(text, lineRangeAt(text, offset))

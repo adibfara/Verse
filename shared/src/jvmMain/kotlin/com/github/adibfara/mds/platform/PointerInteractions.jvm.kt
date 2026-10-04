@@ -1,5 +1,8 @@
 package com.github.adibfara.mds.core.designsystem.component
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,3 +42,12 @@ actual fun Modifier.onTertiaryClick(key: Any?, onClick: () -> Unit): Modifier =
             }
         }
     }
+
+@Composable
+actual fun Modifier.itemActions(
+    key: Any?,
+    interactionSource: MutableInteractionSource,
+    onActivate: () -> Unit,
+    onContextMenu: (Offset) -> Unit,
+): Modifier = onSecondaryClick(key, onContextMenu)
+    .clickable(interactionSource = interactionSource, indication = null, onClick = onActivate)

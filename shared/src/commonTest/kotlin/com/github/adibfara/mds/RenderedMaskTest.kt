@@ -22,6 +22,14 @@ private val corpus = listOf(
     "```kotlin\nval a = 1\n```\n",
     "- [ ] open\n- [x] done\n",
     "plain text only",
+    "before\n\n---\n\nafter\n",
+    "---",
+    "| a | b |\n| --- | --- |\n| 1 | 22 |\n",
+    "| **a** | b |\n| :-- | --: |\n|1|2|\n",
+    "|a|\n|-|\n",
+    "> quote with **bold**\n>\n> second paragraph\n",
+    ">> nested\n",
+    "```\nplain fence\n```\n",
 )
 
 class RenderedMaskTest {
@@ -51,8 +59,10 @@ class RenderedMaskTest {
     }
 
     @Test
-    fun emptyEmphasisKeepsItsMarkers() {
-        assertEquals("** **", rendered("** **"))
+    fun thematicBreaksHideTheirMarkersBecauseARuleIsDrawnInstead() {
+        assertEquals("a\n\n\n\nb", rendered("a\n\n---\n\nb"))
+        assertEquals("", rendered("** **"))
+        assertEquals(listOf(MdRange(3, 6)), parser.parse("a\n\n---\n\nb").rules)
     }
 
     @Test

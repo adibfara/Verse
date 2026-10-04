@@ -46,10 +46,11 @@ fun MdsContextMenu(
     entries: List<MenuEntry>,
     offset: IntOffset,
     onDismiss: () -> Unit,
+    alignment: Alignment = Alignment.TopStart,
 ) {
     val colors = MdsTheme.colors
     Popup(
-        alignment = Alignment.TopStart,
+        alignment = alignment,
         offset = offset,
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
@@ -72,7 +73,7 @@ fun MdsContextMenu(
 }
 
 @Composable
-private fun MenuSeparator() {
+internal fun MenuSeparator() {
     MdsDivider(
         modifier = Modifier.padding(
             horizontal = MdsTheme.spacing.sm,
@@ -82,7 +83,7 @@ private fun MenuSeparator() {
 }
 
 @Composable
-private fun MenuActionRow(entry: MenuEntry.Action, onDismiss: () -> Unit) {
+internal fun MenuActionRow(entry: MenuEntry.Action, onDismiss: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val colors = MdsTheme.colors

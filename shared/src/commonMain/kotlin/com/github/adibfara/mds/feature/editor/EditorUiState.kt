@@ -35,8 +35,10 @@ sealed interface EditorEvent {
     data object ToggleRawMode : EditorEvent
     data object Save : EditorEvent
     data class ToggleTask(val range: MdRange, val checked: Boolean) : EditorEvent
+    data class JumpToAnchor(val target: String) : EditorEvent
     data class ApplyFormat(val action: FormatAction) : EditorEvent
     data class Renamed(val from: FilePath, val to: FilePath) : EditorEvent
+    data class ReportError(val message: String) : EditorEvent
     data object DismissError : EditorEvent
     data object ClearActive : EditorEvent
     data object ToggleFavorite : EditorEvent

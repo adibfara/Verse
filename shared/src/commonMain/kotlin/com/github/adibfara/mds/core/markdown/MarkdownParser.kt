@@ -21,14 +21,21 @@ class MarkdownParser {
         collector.visit(tree)
         val tasks = findTaskMarkers(text)
         val styles = (collector.styles + taskStyles(text, tasks)).sortedBy { it.range.start }
+        val markers = collector.markers.sortedBy { it.start }
+        val tables = alignTables(text, collector.tables, markers)
         return MdDocument(
             text = text,
             blocks = blocks,
             styles = styles,
-            markers = collector.markers.sortedBy { it.start },
-            decorations = buildDecorations(text, styles, tasks),
+            markers = markers,
+            decorations = buildDecorations(text, styles, tasks, collector.codeBlocks) +
+                tables.edits,
             tasks = tasks,
             links = collector.links,
+            codeBlocks = collector.codeBlocks,
+            rules = collector.rules,
+            quoteMarkers = collector.quoteMarkers,
+            tables = tables.grids,
             stats = computeStats(text),
         )
     }
@@ -36,6 +43,7 @@ class MarkdownParser {
 
 private const val BulletGlyph = "•"
 private val TaskBoxReplacement = TaskBoxPlaceholder.toString()
+private val CodeIndent = " ".repeat(CodeIndentSpaces)
 
 private fun taskStyles(text: String, tasks: List<MdTask>): List<StyledRange> =
     tasks.flatMap { task ->
@@ -94,6 +102,7 @@ private fun buildDecorations(
     text: String,
     styles: List<StyledRange>,
     tasks: List<MdTask>,
+    codeBlocks: List<MdCodeBlock>,
 ): List<MaskEdit> {
     val decorations = mutableListOf<MaskEdit>()
 
@@ -116,7 +125,26 @@ private fun buildDecorations(
         decorations.add(MaskEdit(task.range, TaskBoxReplacement))
     }
 
+    codeBlocks.forEach { block ->
+        indentedCodeLines(text, block).forEach { newline ->
+            decorations.add(MaskEdit(MdRange(newline, newline + 1), "\n$CodeIndent"))
+        }
+    }
+
     return decorations
+}
+
+private fun indentedCodeLines(text: String, block: MdCodeBlock): List<Int> {
+    val content = block.contentRange
+    if (content.length <= 0) return emptyList()
+    val newlines = mutableListOf<Int>()
+    if (content.start > 0 && text[content.start - 1] == '\n') newlines.add(content.start - 1)
+    var index = content.start
+    while (index < content.end) {
+        if (text[index] == '\n') newlines.add(index)
+        index++
+    }
+    return newlines
 }
 
 internal fun findTaskMarkerInLine(text: String, lineStart: Int, lineEnd: Int): MdTask? {
@@ -413,8 +441,42 @@ private class StyleCollector(private val source: String) {
     val styles = mutableListOf<StyledRange>()
     val markers = mutableListOf<MdRange>()
     val links = mutableListOf<MdLink>()
+    val codeBlocks = mutableListOf<MdCodeBlock>()
+    val rules = mutableListOf<MdRange>()
+    val quoteMarkers = mutableListOf<MdRange>()
+    val tables = mutableListOf<MdTableSource>()
 
-    fun visit(node: ASTNode, withinImage: Boolean = false) {
+    private fun collectCodeFence(node: ASTNode) {
+        val start = node.children.firstOrNull { it.type == MarkdownTokenTypes.CODE_FENCE_START }
+            ?: return
+        val language = node
+            .firstChildOfType(MarkdownTokenTypes.FENCE_LANG)
+            ?.textIn(source)
+            ?.trim()
+            .orEmpty()
+        val contentNodes = node.children.filter {
+            it.type == MarkdownTokenTypes.CODE_FENCE_CONTENT
+        }
+        val contentStart = contentNodes.firstOrNull()?.startOffset ?: start.endOffset
+        val contentEnd = contentNodes.lastOrNull()?.endOffset ?: contentStart
+        codeBlocks.add(
+            MdCodeBlock(
+                range = node.range(),
+                headerRange = MdRange(start.startOffset, skipToLineEnd(start.endOffset)),
+                contentRange = MdRange(contentStart, contentEnd),
+                language = language,
+                code = source.substring(contentStart, contentEnd).trim('\n'),
+            ),
+        )
+    }
+
+    private fun skipToLineEnd(offset: Int): Int {
+        var index = offset.coerceIn(0, source.length)
+        while (index < source.length && source[index] != '\n') index++
+        return index
+    }
+
+    fun visit(node: ASTNode, withinImage: Boolean = false, withinLink: Boolean = false) {
         HeadingTypes[node.type]?.let { level ->
             styles.add(StyledRange(node.range(), StyleKind.heading(level)))
             node.firstChildOfType(MarkdownTokenTypes.ATX_HEADER)?.let { header ->
@@ -456,6 +518,7 @@ private class StyleCollector(private val source: String) {
                             it.type == MarkdownTokenTypes.FENCE_LANG
                     }
                     .forEach { markers.add(it.range()) }
+                collectCodeFence(node)
             }
 
             MarkdownElementTypes.CODE_BLOCK -> {
@@ -476,7 +539,27 @@ private class StyleCollector(private val source: String) {
                 }
             }
 
-            MarkdownTokenTypes.BLOCK_QUOTE -> markers.add(node.range())
+            MarkdownElementTypes.AUTOLINK,
+            MarkdownTokenTypes.AUTOLINK,
+            MarkdownTokenTypes.EMAIL_AUTOLINK,
+            GFMTokenTypes.GFM_AUTOLINK,
+            -> if (!withinImage && !withinLink) {
+                styles.add(StyledRange(node.range(), StyleKind.Link))
+                links.add(MdLink(node.range(), node.textIn(source).trim('<', '>')))
+            }
+
+            MarkdownTokenTypes.BLOCK_QUOTE -> {
+                val marker = quoteMarkerRange(node)
+                markers.add(marker)
+                quoteMarkers.add(marker)
+            }
+
+            MarkdownTokenTypes.HORIZONTAL_RULE -> {
+                rules.add(node.range())
+                markers.add(node.range())
+            }
+
+            GFMElementTypes.TABLE -> collectTable(node)
 
             MarkdownTokenTypes.LIST_BULLET,
             MarkdownTokenTypes.LIST_NUMBER,
@@ -486,7 +569,58 @@ private class StyleCollector(private val source: String) {
         }
 
         val descendingIntoImage = withinImage || node.type == MarkdownElementTypes.IMAGE
-        node.children.forEach { child -> visit(child, descendingIntoImage) }
+        val descendingIntoLink = withinLink ||
+            node.type == MarkdownElementTypes.INLINE_LINK ||
+            node.type == MarkdownElementTypes.FULL_REFERENCE_LINK ||
+            node.type == MarkdownElementTypes.SHORT_REFERENCE_LINK ||
+            node.type == MarkdownElementTypes.AUTOLINK
+        node.children.forEach { child -> visit(child, descendingIntoImage, descendingIntoLink) }
+    }
+
+    private fun quoteMarkerRange(node: ASTNode): MdRange {
+        val end = node.endOffset
+        val extended = if (end < source.length && source[end] == ' ') end + 1 else end
+        return MdRange(node.startOffset, extended)
+    }
+
+    private fun collectTable(node: ASTNode) {
+        val rows = node.children
+            .filter { it.type == GFMElementTypes.HEADER || it.type == GFMElementTypes.ROW }
+            .map { row ->
+                MdTableRowSource(
+                    range = row.range(),
+                    isHeader = row.type == GFMElementTypes.HEADER,
+                    parts = row.children.mapNotNull { child ->
+                        when (child.type) {
+                            GFMTokenTypes.CELL -> MdTablePart.Cell(trimmedRange(child))
+                            GFMTokenTypes.TABLE_SEPARATOR -> MdTablePart.Divider(child.range())
+                            else -> null
+                        }
+                    },
+                )
+            }
+        if (rows.isEmpty()) return
+        styles.add(StyledRange(node.range(), StyleKind.Table))
+        rows.firstOrNull { it.isHeader }?.let { header ->
+            styles.add(StyledRange(header.range, StyleKind.TableHeader))
+        }
+        tables.add(
+            MdTableSource(
+                range = node.range(),
+                rows = rows,
+                delimiterRange = node.children
+                    .firstOrNull { it.type == GFMTokenTypes.TABLE_SEPARATOR }
+                    ?.range(),
+            ),
+        )
+    }
+
+    private fun trimmedRange(node: ASTNode): MdRange {
+        var start = node.startOffset
+        var end = node.endOffset
+        while (start < end && source[start] == ' ') start++
+        while (end > start && source[end - 1] == ' ') end--
+        return MdRange(start, end)
     }
 
     private fun markEmphasisTokens(node: ASTNode) {

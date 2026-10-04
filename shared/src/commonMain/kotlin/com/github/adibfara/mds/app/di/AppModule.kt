@@ -15,11 +15,13 @@ import com.github.adibfara.mds.core.persistence.createFileStorage
 import com.github.adibfara.mds.core.platform.AppPaths
 import com.github.adibfara.mds.core.platform.LocationPicker
 import com.github.adibfara.mds.core.platform.LocationResolver
+import com.github.adibfara.mds.core.platform.SpeechRecognition
 import com.github.adibfara.mds.core.platform.StoragePermission
 import com.github.adibfara.mds.core.platform.SystemOpener
 import com.github.adibfara.mds.core.platform.createAppPaths
 import com.github.adibfara.mds.core.platform.createLocationPicker
 import com.github.adibfara.mds.core.platform.createLocationResolver
+import com.github.adibfara.mds.core.platform.createSpeechRecognition
 import com.github.adibfara.mds.core.platform.createStoragePermission
 import com.github.adibfara.mds.core.platform.createSystemOpener
 import com.github.adibfara.mds.feature.editor.EditorViewModel
@@ -42,6 +44,7 @@ val appModule = module {
     single<LocationPicker> { createLocationPicker() }
     single<LocationResolver> { createLocationResolver() }
     single<StoragePermission> { createStoragePermission() }
+    single<SpeechRecognition> { createSpeechRecognition() }
     single<FileStorage> { createFileStorage() }
     single<SpaceFileSystemFactory> { createSpaceFileSystemFactory() }
 

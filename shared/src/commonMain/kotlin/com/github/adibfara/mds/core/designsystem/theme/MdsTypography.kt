@@ -35,37 +35,37 @@ data class MdsTypography(
     }
 }
 
-fun mdsTypography(editorFontSize: Float = 15.5f): MdsTypography {
+fun mdsTypography(editorFontSize: Float = 15.5f, uiScale: Float = 1f): MdsTypography {
     val body = editorFontSize.sp
     return MdsTypography(
         uiTitle = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 15.sp,
+            fontSize = 15.sp * uiScale,
             fontWeight = FontWeight.SemiBold,
         ),
         uiBody = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 13.5.sp,
+            fontSize = 13.5.sp * uiScale,
             fontWeight = FontWeight.Normal,
         ),
         uiLabel = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 12.5.sp,
+            fontSize = 12.5.sp * uiScale,
             fontWeight = FontWeight.Medium,
         ),
         uiSmall = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 11.5.sp,
+            fontSize = 11.5.sp * uiScale,
             fontWeight = FontWeight.Normal,
         ),
         tabTitle = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 13.sp,
+            fontSize = 13.sp * uiScale,
             fontWeight = FontWeight.Medium,
         ),
         treeItem = TextStyle(
             fontFamily = FontFamily.SansSerif,
-            fontSize = 13.5.sp,
+            fontSize = 13.5.sp * uiScale,
             fontWeight = FontWeight.Normal,
         ),
         editorBody = TextStyle(

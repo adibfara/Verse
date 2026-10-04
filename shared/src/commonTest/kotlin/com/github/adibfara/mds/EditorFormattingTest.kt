@@ -1,6 +1,7 @@
 package com.github.adibfara.mds
 
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import com.github.adibfara.mds.core.filesystem.InMemorySpaceFileSystem
 import com.github.adibfara.mds.core.filesystem.SpaceFileSystem
 import com.github.adibfara.mds.core.filesystem.SpaceFileSystemFactory
@@ -62,11 +63,7 @@ class EditorFormattingTest {
         Dispatchers.resetMain()
     }
 
-    private fun stateAfter(
-        initial: String,
-        action: FormatAction,
-        selection: MdRange? = null,
-    ): EditorUiState {
+    private fun viewModelFor(initial: String): EditorViewModel {
         val dispatchers = TestDispatchers(dispatcher)
         val scope = CoroutineScope(dispatcher)
         val settingsStore = SettingsStore(
@@ -86,6 +83,15 @@ class EditorFormattingTest {
         val viewModel = EditorViewModel(spaceRepository, settingsStore, dispatchers)
         viewModel.onEvent(EditorEvent.Open(FilePath(NotePath), FileKind.Markdown))
         assertEquals(initial, viewModel.state.value.value.text)
+        return viewModel
+    }
+
+    private fun stateAfter(
+        initial: String,
+        action: FormatAction,
+        selection: MdRange? = null,
+    ): EditorUiState {
+        val viewModel = viewModelFor(initial)
         if (selection != null) {
             viewModel.onEvent(
                 EditorEvent.TextChanged(
@@ -186,6 +192,51 @@ class EditorFormattingTest {
             "loud",
             state.value.text.substring(state.value.selection.min, state.value.selection.max),
         )
+    }
+
+    private fun afterTypingNewline(initial: String, caret: Int): EditorUiState {
+        val viewModel = viewModelFor(initial)
+        viewModel.onEvent(EditorEvent.TextChanged(TextFieldValue(initial, TextRange(caret))))
+        viewModel.onEvent(
+            EditorEvent.TextChanged(
+                TextFieldValue(
+                    text = initial.replaceRange(caret, caret, "\n"),
+                    selection = TextRange(caret + 1),
+                ),
+            ),
+        )
+        return viewModel.state.value
+    }
+
+    @Test
+    fun aTypedNewlineContinuesABulletList() {
+        val state = afterTypingNewline("- milk", 6)
+        assertEquals("- milk\n- ", state.value.text)
+        assertEquals(9, state.value.selection.start)
+    }
+
+    @Test
+    fun aTypedNewlineContinuesATaskAlwaysUnchecked() {
+        val state = afterTypingNewline("- [x] milk", 10)
+        assertEquals("- [x] milk\n- [ ] ", state.value.text)
+    }
+
+    @Test
+    fun aTypedNewlineNumbersTheNextOrderedItem() {
+        val state = afterTypingNewline("1. first", 8)
+        assertEquals("1. first\n2. ", state.value.text)
+    }
+
+    @Test
+    fun aTypedNewlineOnAnEmptyItemDropsTheMarker() {
+        val state = afterTypingNewline("- milk\n- ", 9)
+        assertEquals("- milk\n", state.value.text)
+    }
+
+    @Test
+    fun aTypedNewlineOutsideAListStaysAPlainNewline() {
+        val state = afterTypingNewline("plain", 5)
+        assertEquals("plain\n", state.value.text)
     }
 
     @Test

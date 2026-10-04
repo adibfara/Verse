@@ -26,6 +26,40 @@ class TaskAndLinkTest {
     }
 
     @Test
+    fun bareAndAngledAutolinksAreCollected() {
+        assertEquals(
+            "https://example.com",
+            parser.parse("see https://example.com now").links.single().target,
+        )
+        assertEquals(
+            "https://example.com",
+            parser.parse("see <https://example.com> now").links.single().target,
+        )
+    }
+
+    @Test
+    fun fencedCodeBlocksExposeTheirLanguageAndCode() {
+        val document = parser.parse("intro\n\n```kotlin\nfun main() {}\n```\n")
+        val block = document.codeBlocks.single()
+        assertEquals("kotlin", block.language)
+        assertEquals("fun main() {}", block.code)
+        assertEquals("```kotlin", document.text.substring(block.headerRange.start, block.headerRange.end))
+    }
+
+    @Test
+    fun fencedCodeBlocksWithoutALanguageExposeAnEmptyOne() {
+        val block = parser.parse("```\nplain\n```\n").codeBlocks.single()
+        assertEquals("", block.language)
+        assertEquals("plain", block.code)
+    }
+
+    @Test
+    fun fencedCodeBlocksInsideListsAreCollected() {
+        val document = parser.parse("- item\n\n  ```js\n  let a = 1\n  ```\n")
+        assertEquals(1, document.codeBlocks.size)
+    }
+
+    @Test
     fun referenceLinksWithoutDestinationAreNotCollected() {
         val document = parser.parse("- [x] done\n\n[unresolved] text\n")
         assertTrue(document.links.isEmpty(), "collected ${document.links}")

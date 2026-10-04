@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.github.adibfara.mds.core.designsystem.component.MdsIcon
+import com.github.adibfara.mds.core.designsystem.component.MdsIconButton
 import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MdsText
 import com.github.adibfara.mds.core.designsystem.component.MdsTextField
@@ -70,13 +72,15 @@ fun SearchOverlay(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
                     onClick = onDismiss,
-                ),
+                )
+                .safeDrawingPadding(),
         ) {
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 90.dp)
-                    .widthIn(min = 460.dp, max = 720.dp)
+                    .padding(MdsTheme.spacing.md)
+                    .fillMaxWidth()
+                    .widthIn(max = MdsTheme.sizes.searchPanelWidth)
                     .background(colors.surfaceRaised, MdsTheme.shapes.large)
                     .border(MdsTheme.sizes.borderWidth, colors.border, MdsTheme.shapes.large)
                     .clickable(
@@ -113,11 +117,22 @@ fun SearchOverlay(
                     },
                 verticalArrangement = Arrangement.spacedBy(MdsTheme.spacing.sm),
             ) {
-                MdsText(
-                    text = mode.title,
-                    style = MdsTheme.typography.uiSmall,
-                    color = colors.textMuted,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MdsText(
+                        text = mode.title,
+                        modifier = Modifier.weight(1f),
+                        style = MdsTheme.typography.uiSmall,
+                        color = colors.textMuted,
+                    )
+                    MdsIconButton(
+                        icon = MdsIcons.Close,
+                        contentDescription = "Close search",
+                        onClick = onDismiss,
+                    )
+                }
                 MdsTextField(
                     value = state.query,
                     onValueChange = onQueryChange,
@@ -134,7 +149,9 @@ fun SearchOverlay(
                     )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = MdsTheme.sizes.searchResultsHeight),
                         state = listState,
                     ) {
                         itemsIndexed(state.results) { index, result ->

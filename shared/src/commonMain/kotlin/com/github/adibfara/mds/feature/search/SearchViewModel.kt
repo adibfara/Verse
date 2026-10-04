@@ -191,16 +191,18 @@ class SearchViewModel(
         files.forEach { file ->
             if (matches.size >= MaxContentMatches) return@forEach
             val content = runCatching { fileSystem.readText(file.path) }.getOrNull() ?: return@forEach
-            if (!content.contains(query, ignoreCase = true)) return@forEach
-            content.lineSequence().forEachIndexed { index, line ->
-                if (matches.size < MaxContentMatches && line.contains(query, ignoreCase = true)) {
-                    matches.add(
-                        SearchResult.Match(
-                            path = file.path,
-                            lineNumber = index + 1,
-                            line = line.trim().take(160),
-                        ),
-                    )
+            withContext(dispatchers.default) {
+                if (!content.contains(query, ignoreCase = true)) return@withContext
+                content.lineSequence().forEachIndexed { index, line ->
+                    if (matches.size < MaxContentMatches && line.contains(query, ignoreCase = true)) {
+                        matches.add(
+                            SearchResult.Match(
+                                path = file.path,
+                                lineNumber = index + 1,
+                                line = line.trim().take(160),
+                            ),
+                        )
+                    }
                 }
             }
         }

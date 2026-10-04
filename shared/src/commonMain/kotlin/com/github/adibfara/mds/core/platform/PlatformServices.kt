@@ -24,6 +24,11 @@ interface StoragePermission {
     suspend fun request(): Boolean
 }
 
+interface SpeechRecognition {
+    val isSupported: Boolean
+    suspend fun recognizeSpeech(): String?
+}
+
 enum class PlatformKind {
     Desktop,
     Mobile;
@@ -39,10 +44,15 @@ expect fun createLocationPicker(): LocationPicker
 
 expect fun createStoragePermission(): StoragePermission
 
+expect fun createSpeechRecognition(): SpeechRecognition
+
 expect fun currentPlatformKind(): PlatformKind
 
 @Composable
 expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
+
+@Composable
+expect fun PlatformStatusBarStyle(isDarkTheme: Boolean)
 
 @Composable
 expect fun PlatformFolderPickerOverlay()

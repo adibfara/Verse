@@ -2,6 +2,7 @@ package com.github.adibfara.mds.feature.explorer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.github.adibfara.mds.core.common.Debouncer
 import com.github.adibfara.mds.core.common.DispatcherProvider
 import com.github.adibfara.mds.core.filesystem.SpaceFileSystem
 import com.github.adibfara.mds.core.model.FileKind
@@ -29,6 +30,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 class ExplorerViewModel(
@@ -48,6 +51,7 @@ class ExplorerViewModel(
     private val children = mutableMapOf<FilePath, List<FileNode>>()
     private val expanded = mutableSetOf<FilePath>()
     private val watchers = mutableMapOf<FilePath, Job>()
+    private val watchDebouncer = Debouncer(viewModelScope, 250L)
 
     private val fileSystem: SpaceFileSystem?
         get() = spaceRepository.current.value?.fileSystem
@@ -81,11 +85,16 @@ class ExplorerViewModel(
                         loadDualPaneFolders()
                         session.dualPaneSelectedFolder?.let { selectDualPaneFolder(it) }
                     }
-                    if (mutableState.value.favoritesFilterEnabled) {
-                        refreshFavoritedPaths()
-                    }
+                    refreshFavoritedPaths()
                 }
             }
+        }
+        viewModelScope.launch {
+            spaceRepository.current
+                .flatMapLatest { opened -> opened?.favorites?.paths ?: flowOf(emptySet()) }
+                .collect { paths ->
+                    mutableState.value = mutableState.value.copy(favoritedPaths = paths)
+                }
         }
     }
 
@@ -147,7 +156,13 @@ class ExplorerViewModel(
             ExplorerEvent.ToggleLayoutMode -> toggleLayoutMode()
             is ExplorerEvent.SelectDualPaneFolder -> selectDualPaneFolder(event.path)
             ExplorerEvent.ToggleFavoritesFilter -> toggleFavoritesFilter()
+            is ExplorerEvent.ToggleFavorite -> toggleFavorite(event.node)
         }
+    }
+
+    private fun toggleFavorite(node: FileNode) {
+        val favorites = favorites ?: return
+        viewModelScope.launch { favorites.toggleFavorite(node.path) }
     }
 
     private fun toggleFollowSelection() {
@@ -160,7 +175,6 @@ class ExplorerViewModel(
         val enabled = !mutableState.value.favoritesFilterEnabled
         mutableState.value = mutableState.value.copy(favoritesFilterEnabled = enabled)
         sessionRepository.update { it.copy(favoritesFilterEnabled = enabled) }
-        if (enabled) refreshFavoritedPaths()
     }
 
     private fun refreshFavoritedPaths() {
@@ -256,7 +270,7 @@ class ExplorerViewModel(
         watchers[path] = viewModelScope.launch {
             target.watch(path).collect {
                 loadDirectory(path)
-                rebuildRows()
+                watchDebouncer.submit { rebuildRows() }
             }
         }
     }
@@ -465,7 +479,6 @@ class ExplorerViewModel(
         val rows = mutableListOf<TreeRow>()
         appendRows(FilePath.Root, 0, order, rows)
         mutableState.value = mutableState.value.copy(rows = rows)
-        if (mutableState.value.favoritesFilterEnabled) refreshFavoritedPaths()
     }
 
     private fun appendRows(

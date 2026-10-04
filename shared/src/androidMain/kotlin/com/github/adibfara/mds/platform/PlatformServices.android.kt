@@ -30,6 +30,31 @@ object AndroidPlatform {
     internal fun activityOrNull(): ComponentActivity? = activityRef?.get()
 }
 
+object AndroidSpeechBridge {
+    private var pending: CompletableDeferred<String?>? = null
+
+    var launchSpeechIntent: ((Intent) -> Unit)? = null
+
+    suspend fun recognize(): String? {
+        val launcher = launchSpeechIntent ?: return null
+        val deferred = CompletableDeferred<String?>()
+        pending = deferred
+        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+            )
+        }
+        launcher(intent)
+        return deferred.await()
+    }
+
+    fun complete(text: String?) {
+        pending?.complete(text)
+        pending = null
+    }
+}
+
 object AndroidPermissionBridge {
     private var pendingAllFiles: CompletableDeferred<Boolean>? = null
     private var pendingLegacy: CompletableDeferred<Boolean>? = null
@@ -133,7 +158,14 @@ private class AndroidStoragePermission : StoragePermission {
     }
 }
 
+private class AndroidSpeechRecognition : SpeechRecognition {
+    override val isSupported: Boolean = true
+    override suspend fun recognizeSpeech(): String? = AndroidSpeechBridge.recognize()
+}
+
 actual fun createSystemOpener(): SystemOpener = AndroidSystemOpener()
+
+actual fun createSpeechRecognition(): SpeechRecognition = AndroidSpeechRecognition()
 
 actual fun createAppPaths(): AppPaths = AndroidAppPaths()
 
@@ -151,4 +183,16 @@ actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
 @Composable
 actual fun PlatformFolderPickerOverlay() {
     AndroidFolderPickerOverlay()
+}
+
+@Composable
+actual fun PlatformStatusBarStyle(isDarkTheme: Boolean) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    if (view.isInEditMode) return
+    val window = (view.context as? android.app.Activity)?.window ?: return
+    androidx.compose.runtime.SideEffect {
+        val controller = androidx.core.view.WindowCompat.getInsetsController(window, view)
+        controller.isAppearanceLightStatusBars = !isDarkTheme
+        controller.isAppearanceLightNavigationBars = !isDarkTheme
+    }
 }

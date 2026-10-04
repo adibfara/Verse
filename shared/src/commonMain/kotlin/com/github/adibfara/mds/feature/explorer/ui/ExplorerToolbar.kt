@@ -80,6 +80,7 @@ fun ExplorerToolbar(
         )
         MdsIconButton(
             icon = MdsIcons.Heart,
+            selectedIcon = MdsIcons.HeartFilled,
             contentDescription = "Show only favorites",
             onClick = onToggleFavoritesFilter,
             selected = favoritesFilterEnabled,

@@ -26,6 +26,8 @@ fun FileTree(
     state: ExplorerUiState,
     onEvent: (ExplorerEvent) -> Unit,
     modifier: Modifier = Modifier,
+    showToolbar: Boolean = true,
+    showFooter: Boolean = true,
 ) {
     val colors = MdsTheme.colors
     val listState = rememberLazyListState()
@@ -49,20 +51,22 @@ fun FileTree(
     }
 
     Column(modifier = modifier.fillMaxSize().background(colors.sidebar)) {
-        ExplorerToolbar(
-            sortOrder = state.sortOrder,
-            onNewNote = { onEvent(ExplorerEvent.RequestNewNote(null)) },
-            onNewFolder = { onEvent(ExplorerEvent.RequestNewFolder(null)) },
-            onSortOrderChange = { onEvent(ExplorerEvent.ChangeSortOrder(it)) },
-            onCollapseAll = { onEvent(ExplorerEvent.CollapseAll) },
-            followEnabled = state.followEnabled,
-            onToggleFollow = { onEvent(ExplorerEvent.ToggleFollowSelection) },
-            dualPaneEnabled = state.layoutMode == ExplorerLayoutMode.DualPane,
-            onToggleDualPane = { onEvent(ExplorerEvent.ToggleLayoutMode) },
-            favoritesFilterEnabled = state.favoritesFilterEnabled,
-            onToggleFavoritesFilter = { onEvent(ExplorerEvent.ToggleFavoritesFilter) },
-        )
-        MdsDivider()
+        if (showToolbar) {
+            ExplorerToolbar(
+                sortOrder = state.sortOrder,
+                onNewNote = { onEvent(ExplorerEvent.RequestNewNote(null)) },
+                onNewFolder = { onEvent(ExplorerEvent.RequestNewFolder(null)) },
+                onSortOrderChange = { onEvent(ExplorerEvent.ChangeSortOrder(it)) },
+                onCollapseAll = { onEvent(ExplorerEvent.CollapseAll) },
+                followEnabled = state.followEnabled,
+                onToggleFollow = { onEvent(ExplorerEvent.ToggleFollowSelection) },
+                dualPaneEnabled = state.layoutMode == ExplorerLayoutMode.DualPane,
+                onToggleDualPane = { onEvent(ExplorerEvent.ToggleLayoutMode) },
+                favoritesFilterEnabled = state.favoritesFilterEnabled,
+                onToggleFavoritesFilter = { onEvent(ExplorerEvent.ToggleFavoritesFilter) },
+            )
+            MdsDivider()
+        }
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when {
@@ -79,6 +83,7 @@ fun FileTree(
                         FileTreeRow(
                             row = row,
                             isSelected = state.selectedPath == row.node.path,
+                            isFavorite = row.node.path in state.favoritedPaths,
                             onActivate = { onEvent(ExplorerEvent.Activate(row.node)) },
                             onSecondaryClick = { x, y ->
                                 onEvent(ExplorerEvent.OpenContextMenu(row.node, x, y))
@@ -89,8 +94,10 @@ fun FileTree(
             }
         }
 
-        MdsDivider()
-        SpaceFooter(spaceName = state.spaceName)
+        if (showFooter) {
+            MdsDivider()
+            SpaceFooter(spaceName = state.spaceName)
+        }
     }
 }
 

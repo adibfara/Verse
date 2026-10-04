@@ -165,7 +165,7 @@ class MarkdownFormattingTest {
     fun lineMarkerKeepsIndentationAndOrderedMarkersAndCheckedState() {
         assertEquals(
             "  1. [x] step",
-            applyFormatAction("  1. [x] step", MdRange(0, 0), FormatAction.SetLineMarker(2, LineMarkerKind.Task)).text,
+            applyFormatAction("  1. [x] step", MdRange(0, 0), FormatAction.SetLineMarker(2, LineMarkerKind.Ordered)).text,
         )
         assertEquals(
             "  1. step",
@@ -189,11 +189,68 @@ class MarkdownFormattingTest {
     }
 
     @Test
-    fun reapplyingOrderedOnAnOrderedLineKeepsItsNumberAndSeparator() {
+    fun reapplyingALineMarkerTogglesItOff() {
         assertEquals(
-            "3) step",
+            "step",
             applyFormatAction("3) step", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Ordered)).text,
         )
+        assertEquals(
+            "milk",
+            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Bullet)).text,
+        )
+        assertEquals(
+            "done",
+            applyFormatAction("- [x] done", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Task)).text,
+        )
+    }
+
+    @Test
+    fun reapplyingAHeadingLevelTogglesItOff() {
+        assertEquals(
+            "Title",
+            applyFormatAction("# Title", MdRange(0, 0), FormatAction.SetHeading(0, 1)).text,
+        )
+        assertEquals(
+            "## Title",
+            applyFormatAction("# Title", MdRange(0, 0), FormatAction.SetHeading(0, 2)).text,
+        )
+        assertEquals(
+            "# Title",
+            applyFormatAction("## Title", MdRange(0, 0), FormatAction.SetHeading(0, 1)).text,
+        )
+    }
+
+    @Test
+    fun aCollapsedCaretInsertsAMarkerPairAndSitsInsideIt() {
+        val edit = applyFormatAction(
+            text = "hello",
+            selection = MdRange(5, 5),
+            action = FormatAction.ToggleInline(MdRange(5, 5), InlineFormat.Bold),
+        )
+        assertEquals("hello****", edit.text)
+        assertEquals(MdRange(7, 7), edit.selection)
+    }
+
+    @Test
+    fun aCollapsedCaretBeforeAClosingRunStepsPastIt() {
+        val edit = applyFormatAction(
+            text = "**hi**",
+            selection = MdRange(4, 4),
+            action = FormatAction.ToggleInline(MdRange(4, 4), InlineFormat.Bold),
+        )
+        assertEquals("**hi**", edit.text)
+        assertEquals(MdRange(6, 6), edit.selection)
+    }
+
+    @Test
+    fun aCollapsedCaretInsideAnEmptyPairRemovesIt() {
+        val edit = applyFormatAction(
+            text = "hello****",
+            selection = MdRange(7, 7),
+            action = FormatAction.ToggleInline(MdRange(7, 7), InlineFormat.Bold),
+        )
+        assertEquals("hello", edit.text)
+        assertEquals(MdRange(5, 5), edit.selection)
     }
 
     @Test
@@ -237,10 +294,10 @@ class MarkdownFormattingTest {
     }
 
     @Test
-    fun lineMarkerOnlyTouchesItsOwnLine() {
+    fun lineMarkerAppliesToTheWholeContiguousList() {
         val text = "- one\n- [ ] two\n- three"
         val edit = applyFormatAction(text, MdRange(0, 0), FormatAction.SetLineMarker(6, LineMarkerKind.None))
-        assertEquals("- one\ntwo\n- three", edit.text)
+        assertEquals("one\ntwo\nthree", edit.text)
     }
 
     @Test

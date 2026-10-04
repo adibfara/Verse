@@ -10,9 +10,11 @@ import com.github.adibfara.mds.core.markdown.FormatAction
 import com.github.adibfara.mds.core.markdown.MarkdownParser
 import com.github.adibfara.mds.core.markdown.MdDocument
 import com.github.adibfara.mds.core.markdown.MdRange
+import com.github.adibfara.mds.core.markdown.anchorOffsetIn
 import com.github.adibfara.mds.core.markdown.applyFormatAction
 import com.github.adibfara.mds.core.markdown.computeStats
 import com.github.adibfara.mds.core.markdown.documentWithTaskToggled
+import com.github.adibfara.mds.core.markdown.hasListContinuation
 import com.github.adibfara.mds.core.model.EditorMode
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.core.model.FilePath
@@ -42,6 +44,16 @@ private class EditorSession(
     var isFavorite: Boolean = false,
 ) {
     val isDirty: Boolean get() = value.text != savedText
+
+    val breadcrumb: List<String> = breadcrumbOf(path)
+
+    var absolutePath: String = ""
+}
+
+private fun breadcrumbOf(path: FilePath): List<String> {
+    val segments = path.segments
+    if (segments.isEmpty()) return emptyList()
+    return segments.dropLast(1) + path.nameWithoutExtension
 }
 
 data class DirtyChange(val path: FilePath, val isDirty: Boolean)
@@ -84,8 +96,12 @@ class EditorViewModel(
             EditorEvent.ToggleRawMode -> toggleRawMode()
             EditorEvent.Save -> viewModelScope.launch { flushAll() }
             is EditorEvent.ToggleTask -> toggleTask(event.range, event.checked)
+            is EditorEvent.JumpToAnchor -> jumpToAnchor(event.target)
             is EditorEvent.ApplyFormat -> applyFormat(event.action)
             is EditorEvent.Renamed -> renamed(event.from, event.to)
+            is EditorEvent.ReportError -> mutableState.value =
+                mutableState.value.copy(errorMessage = event.message)
+
             EditorEvent.DismissError -> mutableState.value =
                 mutableState.value.copy(errorMessage = null)
 
@@ -230,6 +246,7 @@ class EditorViewModel(
 
     private fun textChanged(value: TextFieldValue, reparse: Boolean = true) {
         val session = activeSession() ?: return
+        if (reparse && continuedList(session, value)) return
         val textChanged = session.value.text != value.text
         val wasDirty = session.isDirty
         session.value = value
@@ -294,18 +311,41 @@ class EditorViewModel(
         textChanged(session.value.copy(text = updated))
     }
 
+    private fun jumpToAnchor(target: String) {
+        val session = activeSession() ?: return
+        val document = if (session.document.text == session.value.text) {
+            session.document
+        } else {
+            parser.parse(session.value.text).also { session.document = it }
+        }
+        val offset = anchorOffsetIn(document, target) ?: return
+        session.value = session.value.copy(selection = TextRange(offset))
+        publish(session)
+    }
+
     private fun applyFormat(action: FormatAction) {
         val session = activeSession() ?: return
         if (session.kind != FileKind.Markdown) return
         val current = session.value
-        val edit = applyFormatAction(
+        applyFormatTo(
+            session = session,
             text = current.text,
             selection = MdRange(current.selection.min, current.selection.max),
+            reversed = current.selection.start > current.selection.end,
             action = action,
         )
-        if (edit.text == current.text) return
+    }
+
+    private fun applyFormatTo(
+        session: EditorSession,
+        text: String,
+        selection: MdRange,
+        reversed: Boolean,
+        action: FormatAction,
+    ): Boolean {
+        val edit = applyFormatAction(text = text, selection = selection, action = action)
+        if (edit.text == text && edit.selection == selection) return false
         session.document = parser.parse(edit.text)
-        val reversed = current.selection.start > current.selection.end
         textChanged(
             value = TextFieldValue(
                 text = edit.text,
@@ -317,6 +357,29 @@ class EditorViewModel(
             ),
             reparse = false,
         )
+        return true
+    }
+
+    private fun continuedList(session: EditorSession, value: TextFieldValue): Boolean {
+        if (session.kind != FileKind.Markdown) return false
+        val caret = insertedNewlineOffset(session.value, value) ?: return false
+        if (!hasListContinuation(session.value.text, caret)) return false
+        return applyFormatTo(
+            session = session,
+            text = session.value.text,
+            selection = MdRange(caret, caret),
+            reversed = false,
+            action = FormatAction.ContinueList,
+        )
+    }
+
+    private fun insertedNewlineOffset(before: TextFieldValue, after: TextFieldValue): Int? {
+        if (after.text.length != before.text.length + 1) return null
+        if (!after.selection.collapsed) return null
+        val offset = after.selection.start - 1
+        if (offset < 0 || offset > before.text.length) return null
+        if (after.text[offset] != '\n') return null
+        return offset
     }
 
     private fun renamed(from: FilePath, to: FilePath) {
@@ -366,25 +429,22 @@ class EditorViewModel(
     }
 
     private fun stateOf(session: EditorSession): EditorUiState {
-        val fileSystem = spaceRepository.current.value?.fileSystem
+        if (session.absolutePath.isEmpty()) {
+            val fileSystem = spaceRepository.current.value?.fileSystem
+            session.absolutePath = fileSystem?.absolutePathOf(session.path).orEmpty()
+        }
         return EditorUiState(
             path = session.path,
-            breadcrumb = breadcrumbOf(session.path),
+            breadcrumb = session.breadcrumb,
             kind = session.kind,
             mode = session.mode,
             value = session.value,
             document = session.document,
-            absolutePath = fileSystem?.absolutePathOf(session.path).orEmpty(),
+            absolutePath = session.absolutePath,
             isLoading = !session.isLoaded,
             isDirty = session.isDirty,
             isFavorite = session.isFavorite,
         )
-    }
-
-    private fun breadcrumbOf(path: FilePath): List<String> {
-        val segments = path.segments
-        if (segments.isEmpty()) return emptyList()
-        return segments.dropLast(1) + path.nameWithoutExtension
     }
 
     override fun onCleared() {

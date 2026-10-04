@@ -107,7 +107,9 @@ enum class StyleKind {
     ListMarker,
     TaskMarker,
     TaskMarkerDone,
-    TaskText;
+    TaskText,
+    Table,
+    TableHeader;
 
     val isHeading: Boolean get() = ordinal <= Heading6.ordinal
 
@@ -129,9 +131,37 @@ data class StyledRange(val range: MdRange, val kind: StyleKind)
 
 const val TaskBoxPlaceholder = ' '
 
+const val QuoteIndentSpaces = 3
+
+const val CodeIndentSpaces = 2
+
 data class MdTask(val range: MdRange, val checked: Boolean)
 
 data class MdLink(val range: MdRange, val target: String)
+
+data class MdCodeBlock(
+    val range: MdRange,
+    val headerRange: MdRange,
+    val contentRange: MdRange,
+    val language: String,
+    val code: String,
+)
+
+data class MdTableDivider(
+    val range: MdRange,
+    val leadingSpaces: Int,
+    val gutterSpaces: Int,
+) {
+    val replacementLength: Int get() = leadingSpaces + gutterSpaces
+}
+
+data class MdTableGrid(
+    val range: MdRange,
+    val headerRange: MdRange?,
+    val rowRanges: List<MdRange>,
+    val dividers: List<MdTableDivider>,
+    val delimiterRange: MdRange?,
+)
 
 data class DocumentStats(val words: Int, val characters: Int)
 
@@ -143,6 +173,10 @@ data class MdDocument(
     val decorations: List<MaskEdit>,
     val tasks: List<MdTask>,
     val links: List<MdLink>,
+    val codeBlocks: List<MdCodeBlock>,
+    val rules: List<MdRange>,
+    val quoteMarkers: List<MdRange>,
+    val tables: List<MdTableGrid>,
     val stats: DocumentStats,
 ) {
     companion object {
@@ -154,6 +188,10 @@ data class MdDocument(
             decorations = emptyList(),
             tasks = emptyList(),
             links = emptyList(),
+            codeBlocks = emptyList(),
+            rules = emptyList(),
+            quoteMarkers = emptyList(),
+            tables = emptyList(),
             stats = DocumentStats(0, 0),
         )
     }

@@ -33,4 +33,5 @@ data class AppSettings(
     val sortOrder: SortOrder = SortOrder.NameAscending,
     val autoSaveDelayMillis: Long = 800L,
     val showStatusBar: Boolean = true,
+    val showFormattingToolbar: Boolean = true,
 )

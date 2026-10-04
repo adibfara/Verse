@@ -57,6 +57,8 @@ sealed interface ExplorerEvent {
     data class SelectDualPaneFolder(val path: FilePath) : ExplorerEvent
 
     data object ToggleFavoritesFilter : ExplorerEvent
+
+    data class ToggleFavorite(val node: FileNode) : ExplorerEvent
 }
 
 sealed interface ExplorerAction {

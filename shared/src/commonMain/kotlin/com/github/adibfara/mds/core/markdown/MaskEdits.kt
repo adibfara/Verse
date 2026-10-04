@@ -16,6 +16,8 @@ private val ContentBearingKinds = setOf(
     StyleKind.Quote,
 )
 
+private val QuoteIndent = " ".repeat(QuoteIndentSpaces)
+
 fun maskEditsFor(document: MdDocument): List<MaskEdit> {
     if (document.markers.isEmpty()) return document.decorations
     val revealed = emptyConstructMarkers(document)
@@ -24,7 +26,8 @@ fun maskEditsFor(document: MdDocument): List<MaskEdit> {
     } else {
         document.markers.filterNot { it in revealed }
     }
-    return hidden.map { MaskEdit(it, "") } + document.decorations
+    val quotes = document.quoteMarkers.toSet()
+    return hidden.map { MaskEdit(it, if (it in quotes) QuoteIndent else "") } + document.decorations
 }
 
 private fun emptyConstructMarkers(document: MdDocument): Set<MdRange> {

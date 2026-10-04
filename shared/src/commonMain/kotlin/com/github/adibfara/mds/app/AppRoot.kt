@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -19,6 +20,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.github.adibfara.mds.app.ui.DesktopShell
@@ -30,13 +33,20 @@ import com.github.adibfara.mds.core.command.CommandId
 import com.github.adibfara.mds.core.command.CommandRegistry
 import com.github.adibfara.mds.core.command.Commands
 import com.github.adibfara.mds.core.command.commandShortcuts
+import com.github.adibfara.mds.core.designsystem.theme.MobileUiScale
+import com.github.adibfara.mds.core.designsystem.theme.MdsSizes
+import com.github.adibfara.mds.core.designsystem.theme.MdsSpacing
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
+import com.github.adibfara.mds.core.designsystem.theme.mobileSizes
+import com.github.adibfara.mds.core.designsystem.theme.mobileSpacing
 import com.github.adibfara.mds.core.designsystem.theme.resolveTheme
 import com.github.adibfara.mds.core.model.FileNode
 import com.github.adibfara.mds.core.model.FilePath
 import com.github.adibfara.mds.core.platform.LocationResolver
 import com.github.adibfara.mds.core.platform.PlatformFolderPickerOverlay
 import com.github.adibfara.mds.core.platform.PlatformKind
+import com.github.adibfara.mds.core.platform.PlatformStatusBarStyle
+import com.github.adibfara.mds.core.platform.SpeechRecognition
 import com.github.adibfara.mds.core.platform.SystemOpener
 import com.github.adibfara.mds.core.platform.currentPlatformKind
 import com.github.adibfara.mds.feature.editor.EditorEvent
@@ -53,6 +63,7 @@ import com.github.adibfara.mds.feature.space.SpaceRepository
 import com.github.adibfara.mds.feature.space.ui.SpacePickerScreen
 import com.github.adibfara.mds.feature.tabs.TabsEvent
 import com.github.adibfara.mds.feature.tabs.TabsViewModel
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -76,7 +87,15 @@ fun AppRoot(
         if (isMobile && !appState.hasSpace) workspaceViewModel.refreshStorageAccess()
     }
 
-    MdsTheme(theme = theme, editorFontSize = appState.settings.editorFontSize) {
+    PlatformStatusBarStyle(theme.isDark)
+
+    MdsTheme(
+        theme = theme,
+        editorFontSize = appState.settings.editorFontSize,
+        uiScale = if (isMobile) MobileUiScale else 1f,
+        spacing = if (isMobile) mobileSpacing() else MdsSpacing(),
+        sizes = if (isMobile) mobileSizes() else MdsSizes(),
+    ) {
         Box(modifier = Modifier.fillMaxSize().background(MdsTheme.colors.window)) {
             when {
                 !appState.isReady -> if (isMobile) StartupLoadingIndicator() else Unit
@@ -129,6 +148,7 @@ private fun WorkspaceScreen(
     val registry: CommandRegistry = koinInject()
     val spaceRepository: SpaceRepository = koinInject()
     val systemOpener: SystemOpener = koinInject()
+    val speechRecognition: SpeechRecognition = koinInject()
     val externalOpenRequests: ExternalOpenRequests = koinInject()
     val locationResolver: LocationResolver = koinInject()
     var settingsVisible by remember { mutableStateOf(false) }
@@ -155,6 +175,9 @@ private fun WorkspaceScreen(
         activeFile = editorState.path,
         onOpenPath = { tabsViewModel.onEvent(TabsEvent.OpenPath(it)) },
         onOpenExternal = { systemOpener.openUrl(it) },
+        onUnresolved = { target ->
+            editorViewModel.onEvent(EditorEvent.ReportError("Nothing in this space matches \"$target\""))
+        },
     )
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -189,6 +212,31 @@ private fun WorkspaceScreen(
     val onEditorShare: () -> Unit = {
         editorState.path?.let { systemOpener.shareText(it.name, editorState.value.text) }
     }
+    val voiceInputScope = rememberCoroutineScope()
+    val onEditorVoiceInput: (() -> Unit)? = if (speechRecognition.isSupported) {
+        {
+            voiceInputScope.launch {
+                val recognized = speechRecognition.recognizeSpeech()
+                if (!recognized.isNullOrBlank()) {
+                    val value = editorState.value
+                    val insertAt = value.selection.start.coerceIn(0, value.text.length)
+                    val deleteEnd = value.selection.end.coerceIn(insertAt, value.text.length)
+                    val updatedText = value.text.replaceRange(insertAt, deleteEnd, recognized)
+                    editorViewModel.onEvent(
+                        EditorEvent.TextChanged(
+                            TextFieldValue(
+                                text = updatedText,
+                                selection = TextRange(insertAt + recognized.length),
+                            ),
+                        ),
+                    )
+                }
+            }
+            Unit
+        }
+    } else {
+        null
+    }
 
     val handleCommand: (CommandId) -> Boolean = handler@{ id ->
         Commands.tabIndexOf(id)?.let { index ->
@@ -206,6 +254,9 @@ private fun WorkspaceScreen(
             Commands.ToggleRawMode.id -> editorViewModel.onEvent(EditorEvent.ToggleRawMode)
             Commands.ToggleSidebar.id -> workspaceViewModel.toggleSidebar()
             Commands.ToggleTheme.id -> workspaceViewModel.toggleTheme()
+            Commands.ToggleFormattingToolbar.id -> workspaceViewModel.updateSettings {
+                it.copy(showFormattingToolbar = !it.showFormattingToolbar)
+            }
             Commands.OpenSettings.id -> settingsVisible = true
             Commands.CloseSpace.id -> workspaceViewModel.closeSpace()
             Commands.QuickOpen.id -> searchViewModel.open(SearchMode.QuickOpen)
@@ -264,6 +315,11 @@ private fun WorkspaceScreen(
                 onToggleSidebar = workspaceViewModel::toggleSidebar,
                 onResizeSidebar = workspaceViewModel::resizeSidebar,
                 onToggleTheme = workspaceViewModel::toggleTheme,
+                onToggleFormattingToolbar = {
+                    workspaceViewModel.updateSettings {
+                        it.copy(showFormattingToolbar = !it.showFormattingToolbar)
+                    }
+                },
                 onOpenSettings = { settingsVisible = true },
                 onOpenQuickOpen = { searchViewModel.open(SearchMode.QuickOpen) },
                 onOpenInDefaultApplication = {
@@ -282,28 +338,6 @@ private fun WorkspaceScreen(
                 onEditorRequestDelete = onEditorRequestDelete,
                 modifier = shellModifier,
             )
-            if (settingsVisible) {
-                SettingsPanel(
-                    settings = appState.settings,
-                    onSettingsChange = workspaceViewModel::updateSettings,
-                    onCloseSpace = {
-                        settingsVisible = false
-                        workspaceViewModel.closeSpace()
-                    },
-                    onDismiss = { settingsVisible = false },
-                )
-            }
-
-            if (searchState.isOpen) {
-                SearchOverlay(
-                    state = searchState,
-                    onQueryChange = searchViewModel::queryChanged,
-                    onMoveSelection = searchViewModel::moveSelection,
-                    onActivate = searchViewModel::activate,
-                    onActivateSelected = searchViewModel::activateSelected,
-                    onDismiss = searchViewModel::close,
-                )
-            }
         } else {
             MobileShell(
                 appState = appState,
@@ -324,7 +358,50 @@ private fun WorkspaceScreen(
                 onEditorRequestRename = onEditorRequestRename,
                 onEditorRequestMove = onEditorRequestMove,
                 onEditorRequestDelete = onEditorRequestDelete,
+                onVoiceInput = onEditorVoiceInput,
+                onCopyPath = { clipboard.setText(AnnotatedString(it)) },
+                absolutePathOf = absolutePathOf,
+                onOpenSettings = { settingsVisible = true },
+                onOpenSearch = { searchViewModel.open(SearchMode.QuickOpen) },
+                recentSpaces = appState.recentSpaces,
+                onOpenSpace = workspaceViewModel::openRecent,
+                onAddSpace = workspaceViewModel::chooseFolder,
                 modifier = shellModifier,
+            )
+        }
+
+        if (settingsVisible) {
+            SettingsPanel(
+                settings = appState.settings,
+                sortOrder = explorerState.sortOrder,
+                followEnabled = explorerState.followEnabled,
+                onSettingsChange = workspaceViewModel::updateSettings,
+                onSortOrderChange = {
+                    explorerViewModel.onEvent(ExplorerEvent.ChangeSortOrder(it))
+                },
+                onToggleFollow = {
+                    explorerViewModel.onEvent(ExplorerEvent.ToggleFollowSelection)
+                },
+                onAddSpace = {
+                    settingsVisible = false
+                    workspaceViewModel.chooseFolder()
+                },
+                onCloseSpace = {
+                    settingsVisible = false
+                    workspaceViewModel.closeSpace()
+                },
+                onDismiss = { settingsVisible = false },
+            )
+        }
+
+        if (searchState.isOpen) {
+            SearchOverlay(
+                state = searchState,
+                onQueryChange = searchViewModel::queryChanged,
+                onMoveSelection = searchViewModel::moveSelection,
+                onActivate = searchViewModel::activate,
+                onActivateSelected = searchViewModel::activateSelected,
+                onDismiss = searchViewModel::close,
             )
         }
     }

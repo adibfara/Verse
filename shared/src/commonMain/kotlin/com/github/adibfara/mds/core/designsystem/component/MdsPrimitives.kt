@@ -1,12 +1,15 @@
 package com.github.adibfara.mds.core.designsystem.component
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,19 +95,16 @@ fun MdsIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean = false,
+    selectedIcon: ImageVector? = null,
     iconSize: Dp = MdsTheme.sizes.icon,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val colors = MdsTheme.colors
-    val background = when {
-        selected -> colors.surfaceSelected
-        hovered && enabled -> colors.surfaceHover
-        else -> Color.Transparent
-    }
+    val background = if (hovered && enabled) colors.surfaceHover else Color.Transparent
     val tint = when {
         !enabled -> colors.textMuted
-        selected -> colors.textPrimary
+        selected -> colors.accent
         else -> colors.textSecondary
     }
     Box(
@@ -120,8 +120,32 @@ fun MdsIconButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        MdsIcon(icon = icon, contentDescription = contentDescription, tint = tint, size = iconSize)
+        MdsIcon(
+            icon = if (selected) selectedIcon ?: icon else icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            size = iconSize,
+        )
     }
+}
+
+@Composable
+fun MdsFloatingBar(
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val colors = MdsTheme.colors
+    val shape = MdsTheme.shapes.round
+    Row(
+        modifier = modifier
+            .height(MdsTheme.sizes.floatingBarHeight)
+            .background(colors.surfaceRaised, shape)
+            .border(MdsTheme.sizes.borderWidth, colors.border, shape)
+            .padding(horizontal = MdsTheme.spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MdsTheme.spacing.xxs),
+        content = content,
+    )
 }
 
 @Composable

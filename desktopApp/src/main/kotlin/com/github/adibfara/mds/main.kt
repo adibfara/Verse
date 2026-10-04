@@ -37,6 +37,7 @@ fun main(args: Array<String>) {
             state = windowState,
             title = "MDs",
             undecorated = true,
+            transparent = true,
             resizable = true,
         ) {
             val isMaximized = windowState.placement == WindowPlacement.Maximized

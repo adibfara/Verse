@@ -56,13 +56,14 @@ fun resolveTheme(mode: ThemeMode): ThemeDefinition = when (mode) {
 fun MdsTheme(
     theme: ThemeDefinition,
     editorFontSize: Float = 15.5f,
+    uiScale: Float = 1f,
+    spacing: MdsSpacing = MdsSpacing(),
+    sizes: MdsSizes = MdsSizes(),
     content: @Composable () -> Unit,
 ) {
     val colors = theme.colors
-    val typography = remember(editorFontSize) { mdsTypography(editorFontSize) }
-    val spacing = remember { MdsSpacing() }
+    val typography = remember(editorFontSize, uiScale) { mdsTypography(editorFontSize, uiScale) }
     val shapes = remember { MdsShapes() }
-    val sizes = remember { MdsSizes() }
 
     val materialScheme = remember(colors, theme.isDark) {
         val base = if (theme.isDark) darkColorScheme() else lightColorScheme()

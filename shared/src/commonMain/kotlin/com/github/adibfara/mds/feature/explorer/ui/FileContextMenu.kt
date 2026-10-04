@@ -2,28 +2,37 @@ package com.github.adibfara.mds.feature.explorer.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.IntOffset
+import com.github.adibfara.mds.core.designsystem.component.MdsBottomSheet
 import com.github.adibfara.mds.core.designsystem.component.MdsContextMenu
+import com.github.adibfara.mds.core.designsystem.component.MdsMenuSheetList
 import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MenuEntry
 import com.github.adibfara.mds.core.model.FileKind
 import com.github.adibfara.mds.feature.explorer.ContextMenuTarget
 import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 
-@Composable
-fun FileContextMenu(
+fun fileContextMenuEntries(
     target: ContextMenuTarget,
     onEvent: (ExplorerEvent) -> Unit,
     onCopyPath: (String) -> Unit,
     absolutePathOf: (ContextMenuTarget) -> String,
-) {
+    isFavorite: Boolean = false,
+): List<MenuEntry> {
     val node = target.node
-    val entries = buildList {
+    return buildList {
         if (!node.isDirectory) {
             add(
                 MenuEntry.Action(
                     label = "Open",
                     icon = MdsIcons.FileText,
                     onClick = { onEvent(ExplorerEvent.Activate(node)) },
+                ),
+            )
+            add(
+                MenuEntry.Action(
+                    label = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    icon = if (isFavorite) MdsIcons.HeartFilled else MdsIcons.Heart,
+                    onClick = { onEvent(ExplorerEvent.ToggleFavorite(node)) },
                 ),
             )
         }
@@ -99,10 +108,35 @@ fun FileContextMenu(
             ),
         )
     }
+}
 
+@Composable
+fun FileContextMenu(
+    target: ContextMenuTarget,
+    onEvent: (ExplorerEvent) -> Unit,
+    onCopyPath: (String) -> Unit,
+    absolutePathOf: (ContextMenuTarget) -> String,
+    isFavorite: Boolean = false,
+) {
     MdsContextMenu(
-        entries = entries,
+        entries = fileContextMenuEntries(target, onEvent, onCopyPath, absolutePathOf, isFavorite),
         offset = IntOffset(target.x, target.y),
         onDismiss = { onEvent(ExplorerEvent.DismissContextMenu) },
     )
+}
+
+@Composable
+fun FileActionsBottomSheet(
+    target: ContextMenuTarget,
+    onEvent: (ExplorerEvent) -> Unit,
+    onCopyPath: (String) -> Unit,
+    absolutePathOf: (ContextMenuTarget) -> String,
+    isFavorite: Boolean = false,
+) {
+    MdsBottomSheet(onDismiss = { onEvent(ExplorerEvent.DismissContextMenu) }) {
+        MdsMenuSheetList(
+            entries = fileContextMenuEntries(target, onEvent, onCopyPath, absolutePathOf, isFavorite),
+            onEntryClicked = { onEvent(ExplorerEvent.DismissContextMenu) },
+        )
+    }
 }

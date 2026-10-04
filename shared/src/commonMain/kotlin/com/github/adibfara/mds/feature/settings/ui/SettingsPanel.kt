@@ -16,18 +16,24 @@ import com.github.adibfara.mds.core.designsystem.component.MdsText
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.core.designsystem.theme.ThemeMode
 import com.github.adibfara.mds.core.model.EditorMode
+import com.github.adibfara.mds.core.model.SortOrder
 import com.github.adibfara.mds.core.persistence.AppSettings
 import com.github.adibfara.mds.core.persistence.StartupBehavior
 
 @Composable
 fun SettingsPanel(
     settings: AppSettings,
+    sortOrder: SortOrder,
+    followEnabled: Boolean,
     onSettingsChange: ((AppSettings) -> AppSettings) -> Unit,
+    onSortOrderChange: (SortOrder) -> Unit,
+    onToggleFollow: () -> Unit,
+    onAddSpace: () -> Unit,
     onCloseSpace: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     MdsDialog(
-        title = "Settings",
+        title = "Options",
         onDismiss = onDismiss,
         actions = { MdsButton(label = "Done", onClick = onDismiss, primary = true) },
     ) {
@@ -51,6 +57,14 @@ fun SettingsPanel(
                     selected = settings.showStatusBar,
                     onSelect = { shown -> onSettingsChange { it.copy(showStatusBar = shown) } },
                 )
+                OptionRow(
+                    label = "Formatting toolbar",
+                    options = listOf(true to "Shown", false to "Hidden"),
+                    selected = settings.showFormattingToolbar,
+                    onSelect = { shown ->
+                        onSettingsChange { it.copy(showFormattingToolbar = shown) }
+                    },
+                )
             }
 
             SettingsSection(title = "Editing") {
@@ -72,6 +86,21 @@ fun SettingsPanel(
                 )
             }
 
+            SettingsSection(title = "Files") {
+                OptionRow(
+                    label = "Sort by",
+                    options = SortOrder.entries.map { it to it.label },
+                    selected = sortOrder,
+                    onSelect = onSortOrderChange,
+                )
+                OptionRow(
+                    label = "Follow active file",
+                    options = listOf(true to "On", false to "Off"),
+                    selected = followEnabled,
+                    onSelect = { enabled -> if (enabled != followEnabled) onToggleFollow() },
+                )
+            }
+
             SettingsSection(title = "On startup") {
                 OptionRow(
                     label = "When MDs opens",
@@ -83,8 +112,11 @@ fun SettingsPanel(
                 )
             }
 
-            SettingsSection(title = "Space") {
-                MdsButton(label = "Close this space", onClick = onCloseSpace)
+            SettingsSection(title = "Spaces") {
+                Row(horizontalArrangement = Arrangement.spacedBy(MdsTheme.spacing.sm)) {
+                    MdsButton(label = "Add a space...", onClick = onAddSpace)
+                    MdsButton(label = "Close this space", onClick = onCloseSpace)
+                }
             }
         }
     }

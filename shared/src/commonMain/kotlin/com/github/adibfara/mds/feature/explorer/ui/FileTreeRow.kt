@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.github.adibfara.mds.core.designsystem.component.MdsIcon
 import com.github.adibfara.mds.core.designsystem.component.MdsIcons
 import com.github.adibfara.mds.core.designsystem.component.MdsText
-import com.github.adibfara.mds.core.designsystem.component.onSecondaryClick
+import com.github.adibfara.mds.core.designsystem.component.itemActions
 import com.github.adibfara.mds.core.designsystem.theme.MdsTheme
 import com.github.adibfara.mds.feature.explorer.TreeRow
 
@@ -39,6 +39,7 @@ fun FileTreeRow(
     onActivate: () -> Unit,
     onSecondaryClick: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
+    isFavorite: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -60,13 +61,17 @@ fun FileTreeRow(
             .background(background, MdsTheme.shapes.small)
             .hoverable(interactionSource)
             .onGloballyPositioned { rowOrigin = it.positionInRoot() }
-            .onSecondaryClick(row.node.path) { position ->
-                onSecondaryClick(
-                    (rowOrigin.x + position.x).toInt(),
-                    (rowOrigin.y + position.y).toInt(),
-                )
-            }
-            .clickable(interactionSource = interactionSource, indication = null) { onActivate() }
+            .itemActions(
+                key = row.node.path,
+                interactionSource = interactionSource,
+                onActivate = onActivate,
+                onContextMenu = { position ->
+                    onSecondaryClick(
+                        (rowOrigin.x + position.x).toInt(),
+                        (rowOrigin.y + position.y).toInt(),
+                    )
+                },
+            )
             .padding(start = sizes.indentStep * row.depth),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -83,9 +88,19 @@ fun FileTreeRow(
         Spacer(modifier = Modifier.width(MdsTheme.spacing.xs))
         MdsText(
             text = if (row.node.isDirectory) row.node.name else row.node.path.nameWithoutExtension,
+            modifier = Modifier.weight(1f, fill = false),
             style = MdsTheme.typography.treeItem,
             color = if (row.node.isDirectory) colors.textPrimary else colors.textSecondary,
             maxLines = 1,
         )
+        if (isFavorite) {
+            Spacer(modifier = Modifier.width(MdsTheme.spacing.xs))
+            MdsIcon(
+                icon = MdsIcons.HeartFilled,
+                contentDescription = "Favorite",
+                tint = colors.accent,
+                size = sizes.iconSmall,
+            )
+        }
     }
 }

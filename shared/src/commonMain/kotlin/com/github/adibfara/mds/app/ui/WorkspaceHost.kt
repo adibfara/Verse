@@ -14,6 +14,7 @@ import com.github.adibfara.mds.feature.editor.EditorAction
 import com.github.adibfara.mds.feature.editor.EditorEvent
 import com.github.adibfara.mds.feature.editor.EditorViewModel
 import com.github.adibfara.mds.feature.explorer.ExplorerAction
+import com.github.adibfara.mds.feature.explorer.ExplorerEvent
 import com.github.adibfara.mds.feature.explorer.ExplorerUiState
 import com.github.adibfara.mds.feature.explorer.ExplorerViewModel
 import com.github.adibfara.mds.feature.viewer.ui.SpaceImageLoader
@@ -86,6 +87,8 @@ fun WorkspaceEffects(
             editorViewModel.onEvent(EditorEvent.Open(activeTab.path, activeTab.kind))
             if (explorerViewModel.state.value.followEnabled) {
                 explorerViewModel.revealPath(activeTab.path)
+            } else {
+                explorerViewModel.onEvent(ExplorerEvent.Select(activeTab.path))
             }
         }
     }
@@ -118,10 +121,12 @@ fun rememberLinkOpener(
     activeFile: FilePath?,
     onOpenPath: (FilePath) -> Unit,
     onOpenExternal: (String) -> Unit,
+    onUnresolved: (String) -> Unit = {},
 ): (String) -> Unit {
     val scope = rememberCoroutineScope()
     val openPath by rememberUpdatedState(onOpenPath)
     val openExternal by rememberUpdatedState(onOpenExternal)
+    val unresolved by rememberUpdatedState(onUnresolved)
     return remember(scope, spaceRepository, activeFile) {
         { target: String ->
             if (isExternalTarget(target)) {
@@ -132,7 +137,7 @@ fun rememberLinkOpener(
                     val resolved = fileSystem?.let {
                         resolveSpacePath(it, activeFile, target, allowMarkdownExtension = true)
                     }
-                    if (resolved != null) openPath(resolved)
+                    if (resolved != null) openPath(resolved) else unresolved(target)
                 }
                 Unit
             }
