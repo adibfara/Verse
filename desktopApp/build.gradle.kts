@@ -25,6 +25,16 @@ compose.desktop {
             packageVersion = "1.0.0"
             description = "A fast, simple markdown workspace"
 
+            windows {
+                iconFile.set(project.file("icons/verse.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("icons/verse.icns"))
+            }
+            linux {
+                iconFile.set(project.file("icons/verse.png"))
+            }
+
             fileAssociation("text/markdown", "md", "Markdown document")
             fileAssociation("text/markdown", "markdown", "Markdown document")
             fileAssociation("text/plain", "txt", "Text document")

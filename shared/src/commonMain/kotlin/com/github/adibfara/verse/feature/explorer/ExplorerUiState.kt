@@ -47,6 +47,11 @@ data class ContextMenuTarget(
     val y: Int,
 )
 
+data class EmptyAreaMenuTarget(
+    val x: Int,
+    val y: Int,
+)
+
 data class ExplorerUiState(
     val spaceName: String = "",
     val rows: List<TreeRow> = emptyList(),
@@ -55,6 +60,7 @@ data class ExplorerUiState(
     val isLoading: Boolean = false,
     val dialog: ExplorerDialog? = null,
     val contextMenu: ContextMenuTarget? = null,
+    val emptyAreaMenu: EmptyAreaMenuTarget? = null,
     val errorMessage: String? = null,
     val followEnabled: Boolean = false,
     val layoutMode: ExplorerLayoutMode = ExplorerLayoutMode.Tree,

@@ -107,11 +107,19 @@ class ExplorerViewModel(
 
             is ExplorerEvent.OpenContextMenu -> mutableState.value = mutableState.value.copy(
                 contextMenu = ContextMenuTarget(event.node, event.x, event.y),
+                emptyAreaMenu = null,
                 selectedPath = event.node.path,
             )
 
-            ExplorerEvent.DismissContextMenu -> mutableState.value =
-                mutableState.value.copy(contextMenu = null)
+            is ExplorerEvent.OpenEmptyAreaMenu -> mutableState.value = mutableState.value.copy(
+                emptyAreaMenu = EmptyAreaMenuTarget(event.x, event.y),
+                contextMenu = null,
+            )
+
+            ExplorerEvent.DismissContextMenu -> mutableState.value = mutableState.value.copy(
+                contextMenu = null,
+                emptyAreaMenu = null,
+            )
 
             is ExplorerEvent.ChangeSortOrder -> changeSortOrder(event.order)
             ExplorerEvent.CollapseAll -> collapseAll()
@@ -331,7 +339,11 @@ class ExplorerViewModel(
     }
 
     private fun openDialog(dialog: ExplorerDialog) {
-        mutableState.value = mutableState.value.copy(dialog = dialog, contextMenu = null)
+        mutableState.value = mutableState.value.copy(
+            dialog = dialog,
+            contextMenu = null,
+            emptyAreaMenu = null,
+        )
     }
 
     private fun requestMove(node: FileNode) {

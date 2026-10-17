@@ -45,6 +45,7 @@ import com.github.adibfara.verse.feature.editor.ui.PopupTextToolbar
 import com.github.adibfara.verse.feature.editor.ui.TextToolbarPopup
 import com.github.adibfara.verse.feature.explorer.ExplorerEvent
 import com.github.adibfara.verse.feature.explorer.ExplorerUiState
+import com.github.adibfara.verse.feature.explorer.ui.EmptyAreaActionsBottomSheet
 import com.github.adibfara.verse.feature.explorer.ui.ExplorerDialogHost
 import com.github.adibfara.verse.feature.explorer.ui.FileActionsBottomSheet
 import com.github.adibfara.verse.feature.tabs.TabsEvent
@@ -248,6 +249,10 @@ fun MobileShell(
                     absolutePathOf = { absolutePathOf(it.node.path) },
                     isFavorite = target.node.path in explorerState.favoritedPaths,
                 )
+            }
+
+            if (explorerState.emptyAreaMenu != null) {
+                EmptyAreaActionsBottomSheet(onEvent = onExplorerEvent)
             }
 
             TextToolbarPopup(textToolbar)

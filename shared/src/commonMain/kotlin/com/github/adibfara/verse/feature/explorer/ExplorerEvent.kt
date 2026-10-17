@@ -14,6 +14,8 @@ sealed interface ExplorerEvent {
 
     data class OpenContextMenu(val node: FileNode, val x: Int, val y: Int) : ExplorerEvent
 
+    data class OpenEmptyAreaMenu(val x: Int, val y: Int) : ExplorerEvent
+
     data object DismissContextMenu : ExplorerEvent
 
     data class ChangeSortOrder(val order: SortOrder) : ExplorerEvent

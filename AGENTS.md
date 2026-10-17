@@ -1,10 +1,24 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What this is
 
 Verse is an Obsidian-like markdown app built on Compose Multiplatform (Kotlin 2.4.20, Compose MP 1.12.1, AGP 9.1.1). Targets are `jvm` (desktop, the primary focus) and `android`. The defining goal is **speed**: instant startup, instant file open, instant tab switching. Nothing may block the main thread.
+
+## Where to look first
+
+Every package documents its own seam in a nearby `AGENTS.md` — read that before grepping. They cover the files, the
+state/event API, who renders it, and the traps:
+
+`app/AGENTS.md`, `core/AGENTS.md`, `core/designsystem/AGENTS.md`, `core/platform/AGENTS.md`,
+`core/persistence/AGENTS.md`, and one per feature:
+`feature/{editor,explorer,tabs,space,favorites,references,locks,search,settings,viewer}/AGENTS.md`.
+
+Rules with a mechanical definition are enforced by `HouseStyleTest`, which runs with the normal test task
+(`./gradlew :shared:jvmTest`): a `//` comment in any Kotlin file, a hard-coded colour literal outside
+`core/designsystem/theme`, `PointerButton` outside `shared/src/jvmMain`, `androidx.compose.material.icons` anywhere, or
+a Compose UI / material3 import in a ViewModel, UiState or use case all fail the build.
 
 ## Commands
 
@@ -18,10 +32,28 @@ Verse is an Obsidian-like markdown app built on Compose Multiplatform (Kotlin 2.
 ./gradlew :shared:jvmTest                       # all shared tests (commonTest runs here)
 ./gradlew :shared:jvmTest --tests "*MarkerMaskTest*"            # one test class
 ./gradlew :shared:jvmTest --tests "*MarkerMaskTest.maskHidesEmphasisMarkers"   # one test
+./gradlew :shared:jvmTest --tests "*HouseStyleTest*"            # mechanical house-style rules
 ./gradlew :shared:testAndroidHostTest           # Android host tests
 ```
 
 Gradle `-q` hides test stdout. To read `println` output from a test, parse `shared/build/test-results/jvmTest/TEST-*.xml` for its `<system-out>` block. Add `--rerun-tasks` when a test is UP-TO-DATE but you changed non-source inputs.
+
+## Verifying your work
+
+**Do not run the app to check a change.** No `:desktopApp:run`, no clicking through the UI, no screenshotting a live
+window, no "let me just make sure it launches". This is a headless session: a desktop window you spawn cannot be seen or
+driven, so any such attempt is wasted time and a stuck process, not a verification.
+
+Verify the way the project already does — with tests:
+
+- `./gradlew :shared:jvmTest` for anything in `:shared` (compiles the whole module, so it is also your build check).
+- `./gradlew :shared:testAndroidHostTest` when the change touches code the Android target also compiles.
+- `./gradlew :androidApp:assembleDebug` only when you actually need the Android build to type-check.
+
+Then **tell the user what to check by hand**: the exact screen, the exact action, and the exact thing they should see.
+Be specific and short ("open a space, hover `**bold**` in Live mode, the toolbar should appear after a pause"). If a
+change cannot be pinned by a test, say that plainly and describe the manual steps instead of trying to exercise the UI
+yourself. Handing verification to the user is the expected workflow here, not a failure on your part.
 
 ## House style
 
@@ -32,7 +64,9 @@ Gradle `-q` hides test stdout. To read `println` output from a test, parse `shar
 
 ## Architecture
 
-MVVM with a thin domain layer. Nothing in a ViewModel, repository, or use case imports `androidx.compose.ui` or `material3`.
+MVVM with a thin domain layer. Nothing in a ViewModel, repository, or use case imports `material3` or Compose UI — the
+single exception is `feature/editor`, which needs `androidx.compose.ui.text.TextFieldValue` and `TextRange` to hold a
+text field's value. `HouseStyleTest` enforces this.
 
 ```
 UI (composables) -> ViewModel (StateFlow<UiState> + onEvent) -> UseCase/Repository -> SpaceFileSystem / Stores
@@ -56,7 +90,9 @@ State ownership:
 `core/filesystem/SpaceFileSystem` is the only interface that touches storage; nothing else in the app performs I/O. `FilePath` is a value class holding a space-relative `/`-separated path, so no code above this interface sees platform path syntax.
 
 - Desktop: `JvmSpaceFileSystem` (java.nio + `WatchService`), atomic writes via temp file + move.
-- Android: `InMemorySpaceFileSystem` seeded with demo content. Real Android storage (SAF document trees) is a deliberate later round — do not assume file paths work there.
+- Android: `AndroidSpaceFileSystem`, a `JvmSpaceFileSystem` subclass that polls for changes every 1500 ms and caches one
+  instance per space location. `InMemorySpaceFileSystem` is only a test/demo fake now. Real Android storage (SAF
+  document trees) is a deliberate later round — do not assume file paths work there.
 
 Directories are listed **only when expanded**; there is never a recursive walk at startup. `watch()` invalidates just the affected directory.
 
@@ -129,4 +165,7 @@ Desktop entry (`desktopApp/src/main/kotlin/.../main.kt`) owns window concerns: t
 - **`PointerButton` and `PointerEvent.button` are desktop-only** and will break the Android build. Use `Modifier.onSecondaryClick` / `onTertiaryClick` from `core/designsystem/component/PointerInteractions.kt` (right-click on desktop, long-press on Android).
 - The editor deliberately uses the **legacy** `BasicTextField(value: TextFieldValue, visualTransformation = …)`. It is the API that supports span styling *and* an `OffsetMapping` for hidden characters; the newer `TextFieldState` API does not. Re-verify before "modernising" it.
 - Writing Kotlin through bash heredocs in this environment **eats backslashes** — `'\n'` becomes a literal newline and produces "Incorrect character literal". Use the Write/Edit tools for Kotlin containing escapes.
-- When screenshotting the running desktop app on Windows, the capturing process must call `SetProcessDpiAwarenessContext(-4)` first. Without it, a DPI-unaware capture silently returns a clipped, virtualised image and you will chase layout bugs that do not exist.
+- When screenshotting the running desktop app on Windows, the capturing process must call
+  `SetProcessDpiAwarenessContext(-4)` first. Without it, a DPI-unaware capture silently returns a clipped, virtualised
+  image and you will chase layout bugs that do not exist. (This is for captures the user asks for, not a verification
+  step — see "Verifying your work".)

@@ -13,6 +13,9 @@ actual fun Modifier.onSecondaryClick(key: Any?, onClick: (Offset) -> Unit): Modi
         detectTapGestures(onLongPress = onClick)
     }
 
+actual fun Modifier.onBackgroundSecondaryClick(key: Any?, onClick: (Offset) -> Unit): Modifier =
+    onSecondaryClick(key, onClick)
+
 actual fun Modifier.onTertiaryClick(key: Any?, onClick: () -> Unit): Modifier = this
 
 @Composable

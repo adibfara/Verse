@@ -11,10 +11,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import com.github.adibfara.verse.core.designsystem.component.VerseDivider
 import com.github.adibfara.verse.core.designsystem.component.VerseText
+import com.github.adibfara.verse.core.designsystem.component.onBackgroundSecondaryClick
 import com.github.adibfara.verse.core.designsystem.theme.VerseTheme
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.verse.feature.explorer.ExplorerEvent
@@ -31,6 +39,7 @@ fun FileTree(
 ) {
     val colors = VerseTheme.colors
     val listState = rememberLazyListState()
+    var listOrigin by remember { mutableStateOf(Offset.Zero) }
 
     val visibleRows = if (state.favoritesFilterEnabled) {
         state.rows.filter { row ->
@@ -68,7 +77,20 @@ fun FileTree(
             VerseDivider()
         }
 
-        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .onGloballyPositioned { listOrigin = it.positionInRoot() }
+                .onBackgroundSecondaryClick(key = null) { position ->
+                    onEvent(
+                        ExplorerEvent.OpenEmptyAreaMenu(
+                            x = (listOrigin.x + position.x).toInt(),
+                            y = (listOrigin.y + position.y).toInt(),
+                        ),
+                    )
+                },
+        ) {
             when {
                 state.isLoading -> TreeMessage("Loading...")
                 visibleRows.isEmpty() -> TreeMessage(

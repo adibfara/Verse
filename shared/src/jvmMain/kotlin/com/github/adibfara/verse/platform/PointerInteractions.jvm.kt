@@ -28,6 +28,24 @@ actual fun Modifier.onSecondaryClick(key: Any?, onClick: (Offset) -> Unit): Modi
     }
 
 @OptIn(ExperimentalComposeUiApi::class)
+actual fun Modifier.onBackgroundSecondaryClick(key: Any?, onClick: (Offset) -> Unit): Modifier =
+    pointerInput(key) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.type == PointerEventType.Press &&
+                    event.button == PointerButton.Secondary &&
+                    event.changes.none { it.isConsumed }
+                ) {
+                    val position = event.changes.firstOrNull()?.position
+                    event.changes.forEach { it.consume() }
+                    position?.let(onClick)
+                }
+            }
+        }
+    }
+
+@OptIn(ExperimentalComposeUiApi::class)
 actual fun Modifier.onTertiaryClick(key: Any?, onClick: () -> Unit): Modifier =
     pointerInput(key) {
         awaitPointerEventScope {

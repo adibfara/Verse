@@ -3,6 +3,7 @@ package com.github.adibfara.verse
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
@@ -32,10 +33,12 @@ fun main(args: Array<String>) {
 
     application {
         val windowState = rememberWindowState(width = 1280.dp, height = 820.dp)
+        val windowIcon = painterResource("verse-icon.png")
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
             title = "Verse",
+            icon = windowIcon,
             undecorated = true,
             transparent = true,
             resizable = true,

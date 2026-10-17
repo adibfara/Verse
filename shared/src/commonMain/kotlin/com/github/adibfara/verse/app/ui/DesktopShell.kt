@@ -30,6 +30,7 @@ import com.github.adibfara.verse.feature.explorer.ExplorerEvent
 import com.github.adibfara.verse.feature.explorer.ExplorerUiState
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.verse.feature.explorer.ui.DualPaneExplorer
+import com.github.adibfara.verse.feature.explorer.ui.EmptyAreaContextMenu
 import com.github.adibfara.verse.feature.explorer.ui.ExplorerDialogHost
 import com.github.adibfara.verse.feature.explorer.ui.FileContextMenu
 import com.github.adibfara.verse.feature.explorer.ui.FileTree
@@ -133,6 +134,13 @@ fun DesktopShell(
                 onCopyPath = onCopyPath,
                 absolutePathOf = { absolutePathOf(it.node.path) },
                 isFavorite = target.node.path in explorerState.favoritedPaths,
+            )
+        }
+
+        explorerState.emptyAreaMenu?.let { target ->
+            EmptyAreaContextMenu(
+                target = target,
+                onEvent = onExplorerEvent,
             )
         }
 

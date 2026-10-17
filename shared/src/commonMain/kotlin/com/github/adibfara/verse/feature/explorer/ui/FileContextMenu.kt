@@ -9,6 +9,7 @@ import com.github.adibfara.verse.core.designsystem.component.VerseIcons
 import com.github.adibfara.verse.core.designsystem.component.MenuEntry
 import com.github.adibfara.verse.core.model.FileKind
 import com.github.adibfara.verse.feature.explorer.ContextMenuTarget
+import com.github.adibfara.verse.feature.explorer.EmptyAreaMenuTarget
 import com.github.adibfara.verse.feature.explorer.ExplorerEvent
 
 fun fileContextMenuEntries(
@@ -136,6 +137,41 @@ fun FileActionsBottomSheet(
     VerseBottomSheet(onDismiss = { onEvent(ExplorerEvent.DismissContextMenu) }) {
         VerseMenuSheetList(
             entries = fileContextMenuEntries(target, onEvent, onCopyPath, absolutePathOf, isFavorite),
+            onEntryClicked = { onEvent(ExplorerEvent.DismissContextMenu) },
+        )
+    }
+}
+
+fun emptyAreaContextMenuEntries(onEvent: (ExplorerEvent) -> Unit): List<MenuEntry> = listOf(
+    MenuEntry.Action(
+        label = "New note",
+        icon = VerseIcons.FilePlus,
+        onClick = { onEvent(ExplorerEvent.RequestNewNote(null)) },
+    ),
+    MenuEntry.Action(
+        label = "New folder",
+        icon = VerseIcons.FolderPlus,
+        onClick = { onEvent(ExplorerEvent.RequestNewFolder(null)) },
+    ),
+)
+
+@Composable
+fun EmptyAreaContextMenu(
+    target: EmptyAreaMenuTarget,
+    onEvent: (ExplorerEvent) -> Unit,
+) {
+    VerseContextMenu(
+        entries = emptyAreaContextMenuEntries(onEvent),
+        offset = IntOffset(target.x, target.y),
+        onDismiss = { onEvent(ExplorerEvent.DismissContextMenu) },
+    )
+}
+
+@Composable
+fun EmptyAreaActionsBottomSheet(onEvent: (ExplorerEvent) -> Unit) {
+    VerseBottomSheet(onDismiss = { onEvent(ExplorerEvent.DismissContextMenu) }) {
+        VerseMenuSheetList(
+            entries = emptyAreaContextMenuEntries(onEvent),
             onEntryClicked = { onEvent(ExplorerEvent.DismissContextMenu) },
         )
     }
