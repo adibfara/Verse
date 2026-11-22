@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -289,6 +290,7 @@ fun EditorTitleBar(
     modifier: Modifier = Modifier,
     onStartNoteBody: (() -> Unit)? = null,
     focusRequestId: Int? = null,
+    highlightOf: () -> Float = { 0f },
 ) {
     val colors = VerseTheme.colors
     val titleFocusRequester = remember { FocusRequester() }
@@ -312,6 +314,7 @@ fun EditorTitleBar(
                 onStartNoteBody = onStartNoteBody,
                 focusRequester = titleFocusRequester,
                 focusRequestId = focusRequestId,
+                highlightOf = highlightOf,
                 style = VerseTheme.typography.noteTitle,
                 modifier = Modifier.weight(1f),
             )
@@ -335,6 +338,7 @@ private fun EditableTitle(
     modifier: Modifier = Modifier,
     onStartNoteBody: (() -> Unit)? = null,
     focusRequestId: Int? = null,
+    highlightOf: () -> Float = { 0f },
 ) {
     val colors = VerseTheme.colors
     val focusManager = LocalFocusManager.current
@@ -361,7 +365,7 @@ private fun EditableTitle(
             }
         },
         singleLine = false,
-        textStyle = style.copy(color = colors.textPrimary),
+        textStyle = style.copy(color = lerp(colors.textPrimary, colors.accent, highlightOf())),
         cursorBrush = SolidColor(colors.caret),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
         keyboardActions = KeyboardActions(onNext = { startBody() }, onDone = { startBody() }),

@@ -367,8 +367,6 @@ private fun MaskedMarkdownField(
                         layoutOf = { layout.value },
                         toTransformed = { currentMasked.value.mask.originalToTransformed(it) },
                         color = colors.accent,
-                        padding = VerseTheme.spacing.xs,
-                        radius = VerseTheme.spacing.xs,
                     )
                     .then(decorations)
                     .then(caretKeys)
@@ -585,8 +583,6 @@ fun RawMarkdownField(
                     layoutOf = { layout.value },
                     toTransformed = { it },
                     color = colors.accent,
-                    padding = VerseTheme.spacing.xs,
-                    radius = VerseTheme.spacing.xs,
                 )
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
                 .then(listKeys)

@@ -416,9 +416,15 @@ class EditorViewModel(
 
     private fun jumpToOffset(requested: Int) {
         val session = activeSession() ?: return
+        revealCounter++
+        if (requested < 0) {
+            mutableState.value = stateOf(session).copy(
+                revealRequest = RevealRequest(TitleRevealOffset, revealCounter),
+            )
+            return
+        }
         val offset = requested.coerceIn(0, session.value.text.length)
         session.value = session.value.copy(selection = TextRange(offset))
-        revealCounter++
         mutableState.value = stateOf(session).copy(revealRequest = RevealRequest(offset, revealCounter))
     }
 

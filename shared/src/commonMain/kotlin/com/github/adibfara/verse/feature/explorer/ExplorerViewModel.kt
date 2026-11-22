@@ -11,6 +11,7 @@ import com.github.adibfara.verse.core.model.FilePath
 import com.github.adibfara.verse.core.model.SortOrder
 import com.github.adibfara.verse.core.model.sortedBy
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
+import com.github.adibfara.verse.core.persistence.RecentFileEntry
 import com.github.adibfara.verse.core.persistence.SettingsStore
 import com.github.adibfara.verse.core.persistence.WorkspaceSessionRepository
 import com.github.adibfara.verse.core.platform.SystemOpener
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val RecentFileLimit = 200
 
@@ -54,7 +56,9 @@ class ExplorerViewModel(
     private val expanded = mutableSetOf<FilePath>()
     private val watchers = mutableMapOf<FilePath, Job>()
     private val watchDebouncer = Debouncer(viewModelScope, 250L)
-    private var listJob: Job? = null
+    private var recentJob: Job? = null
+    private var favoritesJob: Job? = null
+    private var listsRequested = false
 
     private val fileSystem: SpaceFileSystem?
         get() = spaceRepository.current.value?.fileSystem
@@ -66,6 +70,7 @@ class ExplorerViewModel(
         viewModelScope.launch {
             spaceRepository.current.collect { opened ->
                 resetTree()
+                cancelLists()
                 if (opened == null) {
                     mutableState.value = ExplorerUiState()
                 } else {
@@ -90,7 +95,7 @@ class ExplorerViewModel(
                         session.dualPaneSelectedFolder?.let { selectDualPaneFolder(it) }
                     }
                     refreshFavoritedPaths()
-                    loadList()
+                    if (listsRequested) refreshLists()
                 }
             }
         }
@@ -99,7 +104,7 @@ class ExplorerViewModel(
                 .flatMapLatest { opened -> opened?.favorites?.paths ?: flowOf(emptySet()) }
                 .collect { paths ->
                     mutableState.value = mutableState.value.copy(favoritedPaths = paths)
-                    if (mutableState.value.listMode == ExplorerListMode.Favorites) loadList()
+                    if (favoritesJob != null) loadFavorites()
                 }
         }
     }
@@ -172,14 +177,18 @@ class ExplorerViewModel(
             ExplorerEvent.ToggleFavoritesFilter -> toggleFavoritesFilter()
             is ExplorerEvent.ToggleFavorite -> toggleFavorite(event.node)
             is ExplorerEvent.SelectListMode -> selectListMode(event.mode)
-            ExplorerEvent.RefreshList -> loadList()
+            ExplorerEvent.RefreshList -> {
+                listsRequested = true
+                refreshLists()
+            }
             is ExplorerEvent.RevealFolder -> revealFolder(event.path)
         }
     }
 
     private fun selectListMode(mode: ExplorerListMode) {
         mutableState.value = mutableState.value.copy(listMode = mode)
-        loadList()
+        if (mode == ExplorerListMode.Recent && recentJob == null) loadRecent()
+        if (mode == ExplorerListMode.Favorites && favoritesJob == null) loadFavorites()
     }
 
     private fun revealFolder(path: FilePath) {
@@ -195,34 +204,55 @@ class ExplorerViewModel(
         }
     }
 
-    private fun loadList() {
-        val mode = mutableState.value.listMode
-        if (mode == ExplorerListMode.All) return
+    private fun cancelLists() {
+        recentJob?.cancel()
+        recentJob = null
+        favoritesJob?.cancel()
+        favoritesJob = null
+    }
+
+    private fun refreshLists() {
+        loadRecent()
+        loadFavorites()
+    }
+
+    private fun loadRecent() {
         val target = fileSystem ?: return
-        listJob?.cancel()
-        listJob = viewModelScope.launch {
-            mutableState.value = mutableState.value.copy(isListLoading = true)
-            when (mode) {
-                ExplorerListMode.Recent -> {
-                    val files = runCatching { target.listFilesRecursively() }.getOrElse { emptyList() }
-                        .filterNot { it.isDirectory }
-                        .sortedByDescending { it.lastModified }
-                        .take(RecentFileLimit)
-                    mutableState.value = mutableState.value.copy(recentFiles = files, isListLoading = false)
-                }
-
-                ExplorerListMode.Favorites -> {
-                    val nodes = mutableState.value.favoritedPaths
-                        .mapNotNull { path -> runCatching { target.metadata(path) }.getOrNull() }
-                        .sortedWith(
-                            compareByDescending<FileNode> { it.isDirectory }
-                                .thenBy { it.path.value.lowercase() },
-                        )
-                    mutableState.value = mutableState.value.copy(favoriteNodes = nodes, isListLoading = false)
-                }
-
-                ExplorerListMode.All -> Unit
+        if (mutableState.value.recentFiles.isEmpty()) {
+            val cached = sessionRepository.session.value.recentFiles.map(RecentFileEntry::toFileNode)
+            if (cached.isNotEmpty()) mutableState.value = mutableState.value.copy(recentFiles = cached)
+        }
+        if (recentJob?.isActive == true) return
+        recentJob = viewModelScope.launch {
+            mutableState.value = mutableState.value.copy(isRecentLoading = true)
+            val walked = runCatching { target.listFilesRecursively() }.getOrNull()
+            if (walked == null || fileSystem !== target) {
+                mutableState.value = mutableState.value.copy(isRecentLoading = false)
+                return@launch
             }
+            val recent = withContext(dispatchers.default) {
+                walked.filterNot { it.isDirectory }
+                    .sortedByDescending { it.lastModified }
+                    .take(RecentFileLimit)
+            }
+            mutableState.value = mutableState.value.copy(recentFiles = recent, isRecentLoading = false)
+            val entries = recent.map(RecentFileEntry::of)
+            sessionRepository.update { it.copy(recentFiles = entries) }
+        }
+    }
+
+    private fun loadFavorites() {
+        val target = fileSystem ?: return
+        favoritesJob?.cancel()
+        favoritesJob = viewModelScope.launch {
+            mutableState.value = mutableState.value.copy(isFavoritesLoading = true)
+            val nodes = mutableState.value.favoritedPaths
+                .mapNotNull { path -> runCatching { target.metadata(path) }.getOrNull() }
+                .sortedWith(
+                    compareByDescending<FileNode> { it.isDirectory }
+                        .thenBy { it.path.value.lowercase() },
+                )
+            mutableState.value = mutableState.value.copy(favoriteNodes = nodes, isFavoritesLoading = false)
         }
     }
 

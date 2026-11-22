@@ -25,6 +25,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +43,9 @@ import com.github.adibfara.verse.core.markdown.isAnchorTarget
 import com.github.adibfara.verse.core.markdown.inlineFormatsCovering
 import com.github.adibfara.verse.core.markdown.inlineLinkAt
 import com.github.adibfara.verse.core.markdown.lineMarkerKindAt
+import com.github.adibfara.verse.core.markdown.OutlineEntry
 import com.github.adibfara.verse.core.markdown.outlineOf
+import com.github.adibfara.verse.feature.editor.TitleRevealOffset
 import com.github.adibfara.verse.core.designsystem.component.VerseDivider
 import com.github.adibfara.verse.core.designsystem.component.VerseIconButton
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
@@ -252,7 +256,15 @@ fun EditorPane(
                     )
                 }
 
-                val outline = remember(state.document) { outlineOf(state.document) }
+                val headings = remember(state.document) { outlineOf(state.document) }
+                val title = state.breadcrumb.lastOrNull().orEmpty()
+                val outline = remember(headings, title) {
+                    if (headings.isEmpty() || title.isEmpty()) {
+                        headings
+                    } else {
+                        listOf(OutlineEntry(headings.minOf { it.level }, title, TitleRevealOffset)) + headings
+                    }
+                }
                 if (state.hasFile && state.kind == FileKind.Markdown && outline.size >= 2) {
                     DocumentOutline(
                         entries = outline,
@@ -323,6 +335,16 @@ private fun EditorContent(
     readOnly: Boolean = false,
 ) {
     val scrollState = remember(state.path) { ScrollState(0) }
+    val titleHighlight = remember(state.path) { RevealHighlight() }
+    val titleScope = rememberCoroutineScope()
+    val lastTitleReveal = remember(state.path) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(state.revealRequest) {
+        val request = state.revealRequest ?: return@LaunchedEffect
+        if (request.offset != TitleRevealOffset || request.id == lastTitleReveal.value) return@LaunchedEffect
+        lastTitleReveal.value = request.id
+        titleScope.launch { titleHighlight.breathe(MdRange(0, 0)) }
+        scrollState.animateScrollTo(0)
+    }
     val interactionSource = remember { MutableInteractionSource() }
     val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
     val onImeFixup: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it, parseNow = true)) }
@@ -371,6 +393,7 @@ private fun EditorContent(
                 horizontalPadding = VerseTheme.spacing.none,
                 onStartNoteBody = if (readOnly) null else startNoteBody,
                 focusRequestId = state.focusTitleRequestId,
+                highlightOf = { titleHighlight.strength.value },
             )
             when (state.mode) {
                 EditorMode.Preview -> RenderedMarkdownField(

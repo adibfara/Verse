@@ -8,13 +8,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -24,6 +28,8 @@ import com.github.adibfara.verse.core.designsystem.component.VerseDivider
 import com.github.adibfara.verse.core.designsystem.component.VerseText
 import com.github.adibfara.verse.core.designsystem.component.onBackgroundSecondaryClick
 import com.github.adibfara.verse.core.designsystem.theme.VerseTheme
+import com.github.adibfara.verse.core.model.FileNode
+import com.github.adibfara.verse.core.model.FilePath
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.verse.feature.explorer.ExplorerEvent
 import com.github.adibfara.verse.feature.explorer.ExplorerListMode
@@ -88,9 +94,18 @@ fun FileTree(
             VerseDivider()
         }
 
+        val pagerState = rememberPagerState(initialPage = listMode.ordinal) { ExplorerListMode.entries.size }
         if (showListModes) {
+            LaunchedEffect(pagerState) {
+                snapshotFlow { pagerState.settledPage }.collect { page ->
+                    onEvent(ExplorerEvent.SelectListMode(ExplorerListMode.entries[page]))
+                }
+            }
+            LaunchedEffect(listMode) {
+                if (pagerState.targetPage != listMode.ordinal) pagerState.animateScrollToPage(listMode.ordinal)
+            }
             ExplorerListTabs(
-                selected = listMode,
+                selected = ExplorerListMode.entries[pagerState.targetPage],
                 onSelect = { onEvent(ExplorerEvent.SelectListMode(it)) },
             )
             VerseDivider()
@@ -110,55 +125,47 @@ fun FileTree(
                     )
                 },
         ) {
-            val flatNodes = when (listMode) {
-                ExplorerListMode.Recent -> state.recentFiles
-                ExplorerListMode.Favorites -> state.favoriteNodes
-                ExplorerListMode.All -> emptyList()
-            }
-            when {
-                state.isLoading -> TreeMessage("Loading...")
-                listMode != ExplorerListMode.All && flatNodes.isEmpty() -> TreeMessage(
-                    when {
-                        state.isListLoading -> "Loading..."
-                        listMode == ExplorerListMode.Favorites -> "No favorites yet"
-                        else -> "No recent files"
-                    },
-                )
+            if (showListModes) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                ) { page ->
+                    when (ExplorerListMode.entries[page]) {
+                        ExplorerListMode.Recent -> FlatListPage(
+                            nodes = state.recentFiles,
+                            isLoading = state.isRecentLoading,
+                            emptyMessage = "No recent files",
+                            state = state,
+                            favoritedPaths = state.favoritedPaths,
+                            onEvent = onEvent,
+                        )
 
-                listMode != ExplorerListMode.All -> FlatFileList(
-                    nodes = flatNodes,
-                    selectedPath = state.selectedPath,
-                    favoritedPaths = if (listMode == ExplorerListMode.Favorites) emptySet() else state.favoritedPaths,
-                    onActivate = { node ->
-                        if (node.isDirectory) {
-                            onEvent(ExplorerEvent.RevealFolder(node.path))
-                        } else {
-                            onEvent(ExplorerEvent.Activate(node))
-                        }
-                    },
-                    onSecondaryClick = { node, x, y -> onEvent(ExplorerEvent.OpenContextMenu(node, x, y)) },
-                )
+                        ExplorerListMode.Favorites -> FlatListPage(
+                            nodes = state.favoriteNodes,
+                            isLoading = state.isFavoritesLoading,
+                            emptyMessage = "No favorites yet",
+                            state = state,
+                            favoritedPaths = emptySet(),
+                            onEvent = onEvent,
+                        )
 
-                visibleRows.isEmpty() -> TreeMessage(
-                    if (favoritesFilterActive) "No favorites yet" else "This space is empty",
-                )
-
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(vertical = VerseTheme.spacing.xs),
-                    state = listState,
-                ) {
-                    items(items = visibleRows, key = { row: TreeRow -> row.node.path.value }) { row ->
-                        FileTreeRow(
-                            row = row,
-                            isSelected = state.selectedPath == row.node.path,
-                            isFavorite = row.node.path in state.favoritedPaths,
-                            onActivate = { onEvent(ExplorerEvent.Activate(row.node)) },
-                            onSecondaryClick = { x, y ->
-                                onEvent(ExplorerEvent.OpenContextMenu(row.node, x, y))
-                            },
+                        ExplorerListMode.All -> TreeContent(
+                            state = state,
+                            visibleRows = visibleRows,
+                            emptyMessage = "This space is empty",
+                            listState = listState,
+                            onEvent = onEvent,
                         )
                     }
                 }
+            } else {
+                TreeContent(
+                    state = state,
+                    visibleRows = visibleRows,
+                    emptyMessage = if (favoritesFilterActive) "No favorites yet" else "This space is empty",
+                    listState = listState,
+                    onEvent = onEvent,
+                )
             }
         }
 
@@ -167,6 +174,64 @@ fun FileTree(
             SpaceFooter(spaceName = state.spaceName)
         }
     }
+}
+
+@Composable
+private fun TreeContent(
+    state: ExplorerUiState,
+    visibleRows: List<TreeRow>,
+    emptyMessage: String,
+    listState: LazyListState,
+    onEvent: (ExplorerEvent) -> Unit,
+) {
+    when {
+        state.isLoading -> TreeMessage("Loading...")
+        visibleRows.isEmpty() -> TreeMessage(emptyMessage)
+        else -> LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(vertical = VerseTheme.spacing.xs),
+            state = listState,
+        ) {
+            items(items = visibleRows, key = { row: TreeRow -> row.node.path.value }) { row ->
+                FileTreeRow(
+                    row = row,
+                    isSelected = state.selectedPath == row.node.path,
+                    isFavorite = row.node.path in state.favoritedPaths,
+                    onActivate = { onEvent(ExplorerEvent.Activate(row.node)) },
+                    onSecondaryClick = { x, y ->
+                        onEvent(ExplorerEvent.OpenContextMenu(row.node, x, y))
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlatListPage(
+    nodes: List<FileNode>,
+    isLoading: Boolean,
+    emptyMessage: String,
+    state: ExplorerUiState,
+    favoritedPaths: Set<FilePath>,
+    onEvent: (ExplorerEvent) -> Unit,
+) {
+    if (nodes.isEmpty()) {
+        TreeMessage(if (isLoading) "Loading..." else emptyMessage)
+        return
+    }
+    FlatFileList(
+        nodes = nodes,
+        selectedPath = state.selectedPath,
+        favoritedPaths = favoritedPaths,
+        onActivate = { node ->
+            if (node.isDirectory) {
+                onEvent(ExplorerEvent.RevealFolder(node.path))
+            } else {
+                onEvent(ExplorerEvent.Activate(node))
+            }
+        },
+        onSecondaryClick = { node, x, y -> onEvent(ExplorerEvent.OpenContextMenu(node, x, y)) },
+    )
 }
 
 @Composable

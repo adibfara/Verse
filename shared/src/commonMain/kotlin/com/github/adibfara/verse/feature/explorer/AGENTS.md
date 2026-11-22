@@ -20,7 +20,16 @@
 - `resolveParent(null)` resolves the creation parent from `selectedPath` (the folder itself, or the selected file's parent, else root). The toolbar and `Ctrl+N` / `Ctrl+Shift+N` pass null, and so do the empty-area menu entries.
 - Directories are listed only when expanded (`loadDirectory` on expand); `watch()` invalidates one directory and the rebuild is debounced 250 ms.
 
-- `FileTree(showListModes = true)` (the mobile drawer only) hides the sort and favourites-filter buttons and adds Recent / All / Favorite tabs (`ExplorerListMode`). Recent is `listFilesRecursively` sorted by `lastModified` descending, capped at 200; Favorite is `metadata()` per favourited path, folders first. Both load only while their tab is selected (`loadList`), and again each time the drawer opens (`RefreshList`), so startup never walks the tree. A favourited folder opens the All tab revealed and expanded (`RevealFolder`).
+- `FileTree(showListModes = true)` (the mobile drawer only) hides the sort and favourites-filter buttons and adds
+  Recent / All / Favorite pages (`ExplorerListMode`) in a `HorizontalPager`, so they can be swiped as well as tapped.
+  The pager drives the VM through `settledPage` and follows `listMode` through `targetPage`; using `currentPage` would
+  emit the middle page while animating Recent → Favorite and cancel its own animation. Recent is `listFilesRecursively`
+  sorted by `lastModified` descending, capped at 200; Favorite is `metadata()` per favourited path, folders first. Both
+  load when the drawer opens (`RefreshList`), never at startup.
+- Recent is stale-while-revalidate: the last walk is persisted per space as `WorkspaceState.recentFiles`
+  (`RecentFileEntry`, in `workspace.json`) and shown immediately, then the walk runs in the background and replaces it.
+  "Loading..." only appears when there is no cache at all. A walk that finishes after the space changed is dropped
+  (`fileSystem !== target`). A favourited folder opens the All page revealed and expanded (`RevealFolder`).
 
 ## Gotchas
 

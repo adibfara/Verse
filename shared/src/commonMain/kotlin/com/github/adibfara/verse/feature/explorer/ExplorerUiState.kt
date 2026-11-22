@@ -78,5 +78,6 @@ data class ExplorerUiState(
     val listMode: ExplorerListMode = ExplorerListMode.All,
     val recentFiles: List<FileNode> = emptyList(),
     val favoriteNodes: List<FileNode> = emptyList(),
-    val isListLoading: Boolean = false,
+    val isRecentLoading: Boolean = false,
+    val isFavoritesLoading: Boolean = false,
 )

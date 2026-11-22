@@ -30,6 +30,8 @@ data class EditorUiState(
     val hasFile: Boolean get() = path != null
 }
 
+const val TitleRevealOffset = -1
+
 data class RevealRequest(val offset: Int, val id: Int)
 
 sealed interface EditorEvent {
