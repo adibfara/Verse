@@ -33,6 +33,8 @@ fun ExplorerToolbar(
     onToggleDualPane: () -> Unit = {},
     favoritesFilterEnabled: Boolean = false,
     onToggleFavoritesFilter: () -> Unit = {},
+    showSortOrder: Boolean = true,
+    showFavoritesFilter: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var sortMenuVisible by remember { mutableStateOf(false) }
@@ -55,12 +57,14 @@ fun ExplorerToolbar(
             contentDescription = "New folder",
             onClick = onNewFolder,
         )
-        VerseIconButton(
-            icon = VerseIcons.SortLines,
-            contentDescription = "Change sort order",
-            onClick = { sortMenuVisible = true },
-            selected = sortMenuVisible,
-        )
+        if (showSortOrder) {
+            VerseIconButton(
+                icon = VerseIcons.SortLines,
+                contentDescription = "Change sort order",
+                onClick = { sortMenuVisible = true },
+                selected = sortMenuVisible,
+            )
+        }
         VerseIconButton(
             icon = VerseIcons.CollapseAll,
             contentDescription = "Collapse all",
@@ -78,13 +82,15 @@ fun ExplorerToolbar(
             onClick = onToggleDualPane,
             selected = dualPaneEnabled,
         )
-        VerseIconButton(
-            icon = VerseIcons.Heart,
-            selectedIcon = VerseIcons.HeartFilled,
-            contentDescription = "Show only favorites",
-            onClick = onToggleFavoritesFilter,
-            selected = favoritesFilterEnabled,
-        )
+        if (showFavoritesFilter) {
+            VerseIconButton(
+                icon = VerseIcons.Heart,
+                selectedIcon = VerseIcons.HeartFilled,
+                contentDescription = "Show only favorites",
+                onClick = onToggleFavoritesFilter,
+                selected = favoritesFilterEnabled,
+            )
+        }
 
         if (sortMenuVisible) {
             VerseContextMenu(

@@ -14,9 +14,8 @@ import com.github.adibfara.verse.core.markdown.TextEdit
 import com.github.adibfara.verse.core.markdown.anchorOffsetIn
 import com.github.adibfara.verse.core.markdown.applyFormatAction
 import com.github.adibfara.verse.core.markdown.computeStats
-import com.github.adibfara.verse.core.markdown.continueListAfterNewline
+import com.github.adibfara.verse.core.markdown.compositionThroughEdit
 import com.github.adibfara.verse.core.markdown.documentWithTaskToggled
-import com.github.adibfara.verse.core.markdown.insertedNewlineOffset
 import com.github.adibfara.verse.core.model.EditorMode
 import com.github.adibfara.verse.core.model.FileKind
 import com.github.adibfara.verse.core.model.FilePath
@@ -33,6 +32,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.TimeSource
 
 private const val ParseDebounceMillis = 80L
 
@@ -46,6 +46,7 @@ private class EditorSession(
     var isLoaded: Boolean,
     var isFavorite: Boolean = false,
     var isLocked: Boolean = false,
+    val history: EditHistory,
 ) {
     val isDirty: Boolean get() = value.text != savedText
 
@@ -74,6 +75,9 @@ class EditorViewModel(
     private var pendingFocusPath: FilePath? = null
     private var focusRequestCounter = 0
     private var titleFocusCounter = 0
+    private var revealCounter = 0
+    private val clockOrigin = TimeSource.Monotonic.markNow()
+    private val clock: () -> Long = { clockOrigin.elapsedNow().inWholeMilliseconds }
 
     private val mutableState = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = mutableState.asStateFlow()
@@ -95,13 +99,14 @@ class EditorViewModel(
             is EditorEvent.Open -> open(event.path, event.kind)
             is EditorEvent.RequestFocusContent -> requestFocusContent(event.path)
             is EditorEvent.Close -> closeSession(event.path)
-            is EditorEvent.TextChanged -> textChanged(event.value)
+            is EditorEvent.TextChanged -> fieldChanged(event.value, event.parseNow)
             is EditorEvent.SetMode -> setMode(event.mode)
             EditorEvent.ToggleLivePreview -> toggleLivePreview()
             EditorEvent.ToggleRawMode -> toggleRawMode()
             EditorEvent.Save -> viewModelScope.launch { flushAll() }
             is EditorEvent.ToggleTask -> toggleTask(event.range, event.checked)
             is EditorEvent.JumpToAnchor -> jumpToAnchor(event.target)
+            is EditorEvent.JumpToHeading -> jumpToOffset(event.offset)
             is EditorEvent.ApplyFormat -> applyFormat(event.action)
             is EditorEvent.Renamed -> renamed(event.from, event.to)
             is EditorEvent.ReportError -> mutableState.value =
@@ -116,6 +121,8 @@ class EditorViewModel(
             is EditorEvent.RequestRename -> renameActiveFile(event.name)
             EditorEvent.StartNoteBody -> startNoteBody()
             EditorEvent.JumpToTitle -> jumpToTitle()
+            EditorEvent.Undo -> undo()
+            EditorEvent.Redo -> redo()
         }
     }
 
@@ -126,7 +133,7 @@ class EditorViewModel(
             if (text.startsWith('\n')) {
                 val updated = text.substring(1)
                 if (session.kind == FileKind.Markdown) session.document = parser.parse(updated)
-                textChanged(TextFieldValue(updated, TextRange(0)), reparse = false)
+                textChanged(TextFieldValue(updated, TextRange(0)), reparse = false, boundary = true)
             }
         }
         titleFocusCounter++
@@ -140,7 +147,7 @@ class EditorViewModel(
         val updated = if (text.isEmpty() || text.startsWith('\n')) text else "\n$text"
         if (updated == text && session.value.selection == TextRange(0)) return
         if (session.kind == FileKind.Markdown) session.document = parser.parse(updated)
-        textChanged(TextFieldValue(updated, TextRange(0)), reparse = false)
+        textChanged(TextFieldValue(updated, TextRange(0)), reparse = false, boundary = true)
     }
 
     private fun renameActiveFile(newName: String) {
@@ -176,6 +183,7 @@ class EditorViewModel(
                 isLoaded = session.isLoaded,
                 isFavorite = session.isFavorite,
                 isLocked = session.isLocked,
+                history = session.history,
             )
             sessions[renamed] = updated
             if (activePath == from) {
@@ -262,12 +270,21 @@ class EditorViewModel(
             document = MdDocument.Empty,
             savedText = "",
             isLoaded = false,
+            history = EditHistory(clock),
         ).also { sessions[path] = it }
 
         mutableState.value = stateOf(session).copy(isLoading = true)
         viewModelScope.launch {
             val fileSystem = spaceRepository.current.value?.fileSystem ?: return@launch
             val text = runCatching { fileSystem.readText(path) }.getOrElse { failure ->
+                val missing = runCatching { fileSystem.exists(path) }.getOrDefault(true).not()
+                if (missing && activePath == path) {
+                    sessions.remove(path)
+                    activePath = null
+                    mutableState.value = EditorUiState()
+                    mutableActions.tryEmit(EditorAction.Missing(path))
+                    return@launch
+                }
                 mutableState.value = mutableState.value.copy(
                     isLoading = false,
                     errorMessage = failure.message ?: "Could not open this file",
@@ -304,12 +321,26 @@ class EditorViewModel(
         }
     }
 
-    private fun textChanged(value: TextFieldValue, reparse: Boolean = true, force: Boolean = false) {
+    private fun fieldChanged(value: TextFieldValue, parseNow: Boolean) {
+        val session = activeSession() ?: return
+        if (!parseNow || session.kind != FileKind.Markdown) return textChanged(value)
+        if (session.isLocked && value.text != session.value.text) return
+        if (value.text != session.value.text) session.document = parser.parse(value.text)
+        textChanged(value, reparse = false)
+    }
+
+    private fun textChanged(
+        value: TextFieldValue,
+        reparse: Boolean = true,
+        force: Boolean = false,
+        record: Boolean = true,
+        boundary: Boolean = false,
+    ) {
         val session = activeSession() ?: return
         if (!force && session.isLocked && value.text != session.value.text) return
-        if (reparse && continuedList(session, value)) return
         val textChanged = session.value.text != value.text
         val wasDirty = session.isDirty
+        if (record && textChanged) session.history.record(session.value, value, boundary)
         session.value = value
         publish(session)
 
@@ -369,7 +400,7 @@ class EditorViewModel(
         if (text.substring(range.start, range.end) == replacement) return
         val updated = text.replaceRange(range.start, range.end, replacement)
         session.document = documentWithTaskToggled(session.document, updated, range, checked)
-        textChanged(session.value.copy(text = updated), force = true)
+        textChanged(session.value.copy(text = updated), force = true, boundary = true)
     }
 
     private fun jumpToAnchor(target: String) {
@@ -380,8 +411,15 @@ class EditorViewModel(
             parser.parse(session.value.text).also { session.document = it }
         }
         val offset = anchorOffsetIn(document, target) ?: return
+        jumpToOffset(offset)
+    }
+
+    private fun jumpToOffset(requested: Int) {
+        val session = activeSession() ?: return
+        val offset = requested.coerceIn(0, session.value.text.length)
         session.value = session.value.copy(selection = TextRange(offset))
-        publish(session)
+        revealCounter++
+        mutableState.value = stateOf(session).copy(revealRequest = RevealRequest(offset, revealCounter))
     }
 
     private fun applyFormat(action: FormatAction) {
@@ -395,7 +433,27 @@ class EditorViewModel(
             selection = MdRange(current.selection.min, current.selection.max),
             reversed = current.selection.start > current.selection.end,
             action = action,
+            boundary = true,
         )
+    }
+
+    private fun undo() {
+        val session = activeSession() ?: return
+        if (session.isLocked || !session.kind.isEditable) return
+        val target = session.history.undo(session.value) ?: return
+        restore(session, target)
+    }
+
+    private fun redo() {
+        val session = activeSession() ?: return
+        if (session.isLocked || !session.kind.isEditable) return
+        val target = session.history.redo(session.value) ?: return
+        restore(session, target)
+    }
+
+    private fun restore(session: EditorSession, target: TextFieldValue) {
+        if (session.kind == FileKind.Markdown) session.document = parser.parse(target.text)
+        textChanged(target, reparse = false, record = false)
     }
 
     private fun applyFormatTo(
@@ -404,9 +462,10 @@ class EditorViewModel(
         selection: MdRange,
         reversed: Boolean,
         action: FormatAction,
+        boundary: Boolean = false,
     ): Boolean {
         val edit = applyFormatAction(text = text, selection = selection, action = action)
-        return publishEdit(session, text, selection, edit, reversed)
+        return publishEdit(session, text, selection, edit, reversed, boundary)
     }
 
     private fun publishEdit(
@@ -415,9 +474,17 @@ class EditorViewModel(
         selection: MdRange,
         edit: TextEdit,
         reversed: Boolean = false,
+        boundary: Boolean = false,
     ): Boolean {
         if (edit.text == text && edit.selection == selection) return false
         session.document = parser.parse(edit.text)
+        val composition = session.value.composition?.let {
+            compositionThroughEdit(
+                before = text,
+                after = edit.text,
+                composition = MdRange(it.min, it.max),
+            )
+        }
         textChanged(
             value = TextFieldValue(
                 text = edit.text,
@@ -426,19 +493,17 @@ class EditorViewModel(
                 } else {
                     TextRange(edit.selection.start, edit.selection.end)
                 },
+                composition = composition?.let { range ->
+                    TextRange(
+                        range.start.coerceIn(0, edit.text.length),
+                        range.end.coerceIn(0, edit.text.length),
+                    )
+                },
             ),
             reparse = false,
+            boundary = boundary,
         )
         return true
-    }
-
-    private fun continuedList(session: EditorSession, value: TextFieldValue): Boolean {
-        if (session.kind != FileKind.Markdown) return false
-        if (!value.selection.collapsed) return false
-        val newline = insertedNewlineOffset(session.value.text, value.text) ?: return false
-        val selection = MdRange(value.selection.start, value.selection.end)
-        val edit = continueListAfterNewline(text = value.text, newlineOffset = newline, selection = selection)
-        return publishEdit(session, value.text, selection, edit)
     }
 
     private fun renamed(from: FilePath, to: FilePath) {
@@ -453,6 +518,7 @@ class EditorViewModel(
             isLoaded = session.isLoaded,
             isFavorite = session.isFavorite,
             isLocked = session.isLocked,
+            history = session.history,
         )
         sessions[to] = moved
         if (activePath == from) {
@@ -505,6 +571,8 @@ class EditorViewModel(
             isDirty = session.isDirty,
             isFavorite = session.isFavorite,
             isLocked = session.isLocked,
+            canUndo = session.history.canUndo,
+            canRedo = session.history.canRedo,
         )
     }
 

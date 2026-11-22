@@ -26,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import com.github.adibfara.verse.app.AppUiState
 import com.github.adibfara.verse.core.designsystem.component.VerseDivider
@@ -90,6 +92,15 @@ fun MobileShell(
     var screen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
     var previousScreen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
     var drawerOpen by remember { mutableStateOf(false) }
+
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    fun openDrawer() {
+        keyboardController?.hide()
+        focusManager.clearFocus(force = true)
+        drawerOpen = true
+    }
 
     fun openFile(node: FileNode) {
         onExplorerEvent(ExplorerEvent.Activate(node))
@@ -169,7 +180,7 @@ fun MobileShell(
                                             VerseIconButton(
                                                 icon = VerseIcons.PanelLeft,
                                                 contentDescription = "Open menu",
-                                                onClick = { drawerOpen = true },
+                                                onClick = { openDrawer() },
                                             )
                                         }
                                     },
@@ -219,7 +230,7 @@ fun MobileShell(
                             onSearch = onOpenSearch,
                             onAdd = { onExplorerEvent(ExplorerEvent.RequestNewNote(null)) },
                             onTabs = { openTabsGrid() },
-                            onMenu = { drawerOpen = true },
+                            onMenu = { openDrawer() },
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .navigationBarsPadding()

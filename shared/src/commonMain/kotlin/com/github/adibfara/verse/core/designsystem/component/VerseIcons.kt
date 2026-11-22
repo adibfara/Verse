@@ -139,6 +139,39 @@ object VerseIcons {
         lineTo(4f, 12f)
     } }
 
+    val CheckSquare: ImageVector by lazy { strokeIcon("CheckSquare") {
+        moveTo(6.5f, 4f)
+        lineTo(17.5f, 4f)
+        curveTo(18.9f, 4f, 20f, 5.1f, 20f, 6.5f)
+        lineTo(20f, 17.5f)
+        curveTo(20f, 18.9f, 18.9f, 20f, 17.5f, 20f)
+        lineTo(6.5f, 20f)
+        curveTo(5.1f, 20f, 4f, 18.9f, 4f, 17.5f)
+        lineTo(4f, 6.5f)
+        curveTo(4f, 5.1f, 5.1f, 4f, 6.5f, 4f)
+        close()
+        moveTo(8.8f, 12.2f)
+        lineTo(11f, 14.4f)
+        lineTo(15.6f, 9.4f)
+    } }
+
+    val Bullet: ImageVector by lazy { filledIcon("Bullet") {
+        circle(12f, 12f, 5f)
+    } }
+
+    val Outline: ImageVector by lazy { strokeIcon("Outline") {
+        segment(4f, 6f, 20f, 6f)
+        segment(4f, 12f, 14f, 12f)
+        segment(4f, 18f, 18f, 18f)
+    } }
+
+    val Hash: ImageVector by lazy { strokeIcon("Hash") {
+        segment(4f, 9f, 20f, 9f)
+        segment(4f, 15f, 20f, 15f)
+        segment(10f, 3f, 8f, 21f)
+        segment(16f, 3f, 14f, 21f)
+    } }
+
     val ArrowLeft: ImageVector by lazy { strokeIcon("ArrowLeft") {
         segment(19f, 12f, 5f, 12f)
         moveTo(12f, 19f)
@@ -468,20 +501,6 @@ object VerseIcons {
         dot(12f, 12f)
     } }
 
-    val ListOrdered: ImageVector by lazy { strokeIcon("ListOrdered") {
-        segment(10f, 6f, 20f, 6f)
-        segment(10f, 12f, 20f, 12f)
-        segment(10f, 18f, 20f, 18f)
-        moveTo(4.5f, 4.5f)
-        lineTo(4.5f, 7.5f)
-        moveTo(4f, 4.5f)
-        lineTo(5f, 4.5f)
-        moveTo(4f, 10.5f)
-        lineTo(5.3f, 10.5f)
-        curveTo(5.3f, 10.5f, 4.2f, 11.6f, 4f, 12f)
-        lineTo(5.3f, 12f)
-    } }
-
     val Share: ImageVector by lazy { strokeIcon("Share") {
         circle(18f, 5f, 2.5f)
         circle(6f, 12f, 2.5f)
@@ -516,5 +535,27 @@ object VerseIcons {
         curveTo(15.3f, 18f, 18f, 14.9f, 18f, 11f)
         segment(12f, 18f, 12f, 21.5f)
         segment(8.5f, 21.5f, 15.5f, 21.5f)
+    } }
+
+    val Undo: ImageVector by lazy { strokeIcon("Undo") {
+        moveTo(9f, 14f)
+        lineTo(4f, 9f)
+        lineTo(9f, 4f)
+        moveTo(4f, 9f)
+        lineTo(14.5f, 9f)
+        curveTo(17.54f, 9f, 20f, 11.46f, 20f, 14.5f)
+        curveTo(20f, 17.54f, 17.54f, 20f, 14.5f, 20f)
+        lineTo(11f, 20f)
+    } }
+
+    val Redo: ImageVector by lazy { strokeIcon("Redo") {
+        moveTo(15f, 14f)
+        lineTo(20f, 9f)
+        lineTo(15f, 4f)
+        moveTo(20f, 9f)
+        lineTo(9.5f, 9f)
+        curveTo(6.46f, 9f, 4f, 11.46f, 4f, 14.5f)
+        curveTo(4f, 17.54f, 6.46f, 20f, 9.5f, 20f)
+        lineTo(13f, 20f)
     } }
 }

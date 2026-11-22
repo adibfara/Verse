@@ -22,12 +22,16 @@ fun anchorOffsetIn(document: MdDocument, target: String): Int? {
     val text = document.text
     document.styles.forEach { styled ->
         if (!styled.kind.isHeading) return@forEach
-        val enclosed = document.markers.filter { it.overlaps(styled.range) }
-        val visible = visibleOffsets(text, styled.range, enclosed)
+        val visible = headingVisibleOffsets(document, styled.range)
         if (headingSlug(visible.map(text::get).joinToString("")) != slug) return@forEach
         return visible.firstOrNull { !text[it].isWhitespace() } ?: styled.range.start
     }
     return null
+}
+
+internal fun headingVisibleOffsets(document: MdDocument, range: MdRange): List<Int> {
+    val enclosed = document.markers.filter { it.overlaps(range) }
+    return visibleOffsets(document.text, range, enclosed)
 }
 
 private fun visibleOffsets(text: String, range: MdRange, markers: List<MdRange>): List<Int> {

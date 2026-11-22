@@ -57,6 +57,9 @@ data class VerseSizes(
     val dialogMaxWidth: Dp = 560.dp,
     val searchPanelWidth: Dp = 720.dp,
     val searchResultsHeight: Dp = 420.dp,
+    val outlinePanelWidth: Dp = 260.dp,
+    val menuPanelWidth: Dp = 240.dp,
+    val outlinePanelMaxHeight: Dp = 380.dp,
 )
 
 const val MobileUiScale: Float = 1.2f

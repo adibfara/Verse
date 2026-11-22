@@ -6,10 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
-import com.github.adibfara.verse.core.designsystem.component.VerseContextMenu
+import com.github.adibfara.verse.core.designsystem.component.VerseMorphMenu
 import com.github.adibfara.verse.core.designsystem.component.VerseIconButton
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
 import com.github.adibfara.verse.core.designsystem.component.MenuEntry
@@ -33,7 +31,6 @@ fun EditorOverflowButton(
     onAction: (EditorOverflowAction) -> Unit,
     modifier: Modifier = Modifier,
     leadingEntries: List<MenuEntry> = emptyList(),
-    alignment: Alignment = Alignment.TopStart,
     fontSize: Float? = null,
     onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
@@ -46,7 +43,6 @@ fun EditorOverflowButton(
         )
         if (expanded) {
             fun act(action: EditorOverflowAction) {
-                expanded = false
                 onAction(action)
             }
             val trailingEntries = listOf(
@@ -109,11 +105,10 @@ fun EditorOverflowButton(
                 }
                 addAll(trailingEntries)
             }
-            VerseContextMenu(
+            VerseMorphMenu(
                 entries = entries,
-                offset = IntOffset.Zero,
+                triggerIcon = VerseIcons.MoreVertical,
                 onDismiss = { expanded = false },
-                alignment = alignment,
             )
         }
     }

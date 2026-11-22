@@ -5,6 +5,12 @@ import com.github.adibfara.verse.core.model.FilePath
 import com.github.adibfara.verse.core.model.SortOrder
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
 
+enum class ExplorerListMode(val label: String) {
+    Recent("Recent"),
+    All("All"),
+    Favorites("Favorite"),
+}
+
 data class TreeRow(
     val node: FileNode,
     val depth: Int,
@@ -69,4 +75,8 @@ data class ExplorerUiState(
     val dualPaneFiles: List<FileNode> = emptyList(),
     val favoritesFilterEnabled: Boolean = false,
     val favoritedPaths: Set<FilePath> = emptySet(),
+    val listMode: ExplorerListMode = ExplorerListMode.All,
+    val recentFiles: List<FileNode> = emptyList(),
+    val favoriteNodes: List<FileNode> = emptyList(),
+    val isListLoading: Boolean = false,
 )

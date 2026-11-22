@@ -26,6 +26,7 @@ import com.github.adibfara.verse.core.designsystem.component.onBackgroundSeconda
 import com.github.adibfara.verse.core.designsystem.theme.VerseTheme
 import com.github.adibfara.verse.core.persistence.ExplorerLayoutMode
 import com.github.adibfara.verse.feature.explorer.ExplorerEvent
+import com.github.adibfara.verse.feature.explorer.ExplorerListMode
 import com.github.adibfara.verse.feature.explorer.ExplorerUiState
 import com.github.adibfara.verse.feature.explorer.TreeRow
 
@@ -36,12 +37,15 @@ fun FileTree(
     modifier: Modifier = Modifier,
     showToolbar: Boolean = true,
     showFooter: Boolean = true,
+    showListModes: Boolean = false,
 ) {
     val colors = VerseTheme.colors
     val listState = rememberLazyListState()
     var listOrigin by remember { mutableStateOf(Offset.Zero) }
 
-    val visibleRows = if (state.favoritesFilterEnabled) {
+    val favoritesFilterActive = state.favoritesFilterEnabled && !showListModes
+    val listMode = if (showListModes) state.listMode else ExplorerListMode.All
+    val visibleRows = if (favoritesFilterActive) {
         state.rows.filter { row ->
             if (row.node.isDirectory) {
                 state.favoritedPaths.any { it.isDescendantOf(row.node.path) }
@@ -53,7 +57,12 @@ fun FileTree(
         state.rows
     }
 
-    LaunchedEffect(state.selectedPath, visibleRows) {
+    if (showListModes) {
+        LaunchedEffect(Unit) { onEvent(ExplorerEvent.RefreshList) }
+    }
+
+    LaunchedEffect(state.selectedPath, visibleRows, listMode) {
+        if (listMode != ExplorerListMode.All) return@LaunchedEffect
         val target = state.selectedPath ?: return@LaunchedEffect
         val index = visibleRows.indexOfFirst { it.node.path == target }
         if (index >= 0) listState.animateScrollToItem(index)
@@ -73,6 +82,16 @@ fun FileTree(
                 onToggleDualPane = { onEvent(ExplorerEvent.ToggleLayoutMode) },
                 favoritesFilterEnabled = state.favoritesFilterEnabled,
                 onToggleFavoritesFilter = { onEvent(ExplorerEvent.ToggleFavoritesFilter) },
+                showSortOrder = !showListModes,
+                showFavoritesFilter = !showListModes,
+            )
+            VerseDivider()
+        }
+
+        if (showListModes) {
+            ExplorerListTabs(
+                selected = listMode,
+                onSelect = { onEvent(ExplorerEvent.SelectListMode(it)) },
             )
             VerseDivider()
         }
@@ -91,10 +110,37 @@ fun FileTree(
                     )
                 },
         ) {
+            val flatNodes = when (listMode) {
+                ExplorerListMode.Recent -> state.recentFiles
+                ExplorerListMode.Favorites -> state.favoriteNodes
+                ExplorerListMode.All -> emptyList()
+            }
             when {
                 state.isLoading -> TreeMessage("Loading...")
+                listMode != ExplorerListMode.All && flatNodes.isEmpty() -> TreeMessage(
+                    when {
+                        state.isListLoading -> "Loading..."
+                        listMode == ExplorerListMode.Favorites -> "No favorites yet"
+                        else -> "No recent files"
+                    },
+                )
+
+                listMode != ExplorerListMode.All -> FlatFileList(
+                    nodes = flatNodes,
+                    selectedPath = state.selectedPath,
+                    favoritedPaths = if (listMode == ExplorerListMode.Favorites) emptySet() else state.favoritedPaths,
+                    onActivate = { node ->
+                        if (node.isDirectory) {
+                            onEvent(ExplorerEvent.RevealFolder(node.path))
+                        } else {
+                            onEvent(ExplorerEvent.Activate(node))
+                        }
+                    },
+                    onSecondaryClick = { node, x, y -> onEvent(ExplorerEvent.OpenContextMenu(node, x, y)) },
+                )
+
                 visibleRows.isEmpty() -> TreeMessage(
-                    if (state.favoritesFilterEnabled) "No favorites yet" else "This space is empty",
+                    if (favoritesFilterActive) "No favorites yet" else "This space is empty",
                 )
 
                 else -> LazyColumn(

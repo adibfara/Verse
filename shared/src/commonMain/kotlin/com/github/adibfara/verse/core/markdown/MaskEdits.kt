@@ -16,7 +16,19 @@ private val ContentBearingKinds = setOf(
     StyleKind.Quote,
 )
 
+private val HeadingKinds = setOf(
+    StyleKind.Heading1,
+    StyleKind.Heading2,
+    StyleKind.Heading3,
+    StyleKind.Heading4,
+    StyleKind.Heading5,
+    StyleKind.Heading6,
+)
+
 private val QuoteIndent = " ".repeat(QuoteIndentSpaces)
+
+private fun endsWithSpace(text: String, marker: MdRange): Boolean =
+    marker.end in 1..text.length && text[marker.end - 1] == ' '
 
 fun maskEditsFor(document: MdDocument): List<MaskEdit> {
     if (document.markers.isEmpty()) return document.decorations
@@ -36,6 +48,7 @@ private fun emptyConstructMarkers(document: MdDocument): Set<MdRange> {
         if (styled.kind !in ContentBearingKinds) return@forEach
         val enclosed = markersWithin(document.markers, styled.range)
         if (enclosed.isEmpty()) return@forEach
+        if (styled.kind in HeadingKinds && enclosed.all { endsWithSpace(document.text, it) }) return@forEach
         if (hasVisibleContent(document.text, styled.range, enclosed)) return@forEach
         revealed.addAll(enclosed)
     }

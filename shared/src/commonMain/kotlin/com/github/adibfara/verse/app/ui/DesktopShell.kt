@@ -1,5 +1,13 @@
 package com.github.adibfara.verse.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
@@ -70,7 +78,7 @@ fun DesktopShell(
     onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     val colors = VerseTheme.colors
-    val windowShapeModifier = if (windowChrome != null) {
+    val windowShapeModifier = if (windowChrome != null && !windowChrome.isMaximized) {
         Modifier.clip(VerseTheme.shapes.window)
     } else {
         Modifier
@@ -93,21 +101,27 @@ fun DesktopShell(
             VerseDivider()
 
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (appState.sidebarVisible) {
-                    if (explorerState.layoutMode == ExplorerLayoutMode.DualPane) {
-                        DualPaneExplorer(
-                            state = explorerState,
-                            onEvent = onExplorerEvent,
-                            modifier = Modifier.width(appState.sidebarWidth.dp * 1.6f).fillMaxHeight(),
-                        )
-                    } else {
-                        FileTree(
-                            state = explorerState,
-                            onEvent = onExplorerEvent,
-                            modifier = Modifier.width(appState.sidebarWidth.dp).fillMaxHeight(),
-                        )
+                AnimatedVisibility(
+                    visible = appState.sidebarVisible,
+                    enter = SidebarEnter,
+                    exit = SidebarExit,
+                ) {
+                    Row {
+                        if (explorerState.layoutMode == ExplorerLayoutMode.DualPane) {
+                            DualPaneExplorer(
+                                state = explorerState,
+                                onEvent = onExplorerEvent,
+                                modifier = Modifier.width(appState.sidebarWidth.dp * 1.6f).fillMaxHeight(),
+                            )
+                        } else {
+                            FileTree(
+                                state = explorerState,
+                                onEvent = onExplorerEvent,
+                                modifier = Modifier.width(appState.sidebarWidth.dp).fillMaxHeight(),
+                            )
+                        }
+                        VerseSplitter(onDelta = onResizeSidebar)
                     }
-                    VerseSplitter(onDelta = onResizeSidebar)
                 }
 
                 EditorPane(
@@ -157,6 +171,17 @@ fun DesktopShell(
         }
     }
 }
+
+private const val SidebarAnimationMillis = 220
+private const val SidebarFadeMillis = 120
+
+private val SidebarEnter: EnterTransition =
+    expandHorizontally(animationSpec = tween(SidebarAnimationMillis)) +
+        fadeIn(animationSpec = tween(SidebarFadeMillis))
+
+private val SidebarExit: ExitTransition =
+    shrinkHorizontally(animationSpec = tween(SidebarAnimationMillis)) +
+        fadeOut(animationSpec = tween(SidebarFadeMillis))
 
 @Composable
 private fun TopBar(

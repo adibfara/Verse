@@ -49,6 +49,10 @@ fun EditorHeader(
     onRevealInFileManager: () -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleLock: () -> Unit = {},
+    canUndo: Boolean = false,
+    canRedo: Boolean = false,
+    onUndo: () -> Unit = {},
+    onRedo: () -> Unit = {},
     onOverflowAction: (EditorOverflowAction) -> Unit,
     modifier: Modifier = Modifier,
     leading: (@Composable () -> Unit)? = null,
@@ -95,6 +99,10 @@ fun EditorHeader(
                 onModeChange = onModeChange,
                 onToggleFavorite = onToggleFavorite,
                 onToggleLock = onToggleLock,
+                canUndo = canUndo,
+                canRedo = canRedo,
+                onUndo = onUndo,
+                onRedo = onRedo,
                 onOpenSettings = onOpenSettings,
                 onVoiceInput = onVoiceInput,
                 onOverflowAction = onOverflowAction,
@@ -172,6 +180,10 @@ private fun CompactHeaderActions(
     onModeChange: (EditorMode) -> Unit,
     onToggleFavorite: () -> Unit,
     onToggleLock: () -> Unit,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
     onOpenSettings: (() -> Unit)?,
     onVoiceInput: (() -> Unit)?,
     onOverflowAction: (EditorOverflowAction) -> Unit,
@@ -183,6 +195,13 @@ private fun CompactHeaderActions(
         onOpenSettings?.let {
             add(MenuEntry.Action(label = "Options...", icon = VerseIcons.Sliders, onClick = it))
         }
+        add(
+            MenuEntry.Action(
+                label = if (isRaw) "Rendered editing mode" else "Raw markdown mode",
+                icon = if (isRaw) VerseIcons.Eye else VerseIcons.Code,
+                onClick = { onModeChange(if (isRaw) EditorMode.Preview else EditorMode.Raw) },
+            ),
+        )
         add(
             MenuEntry.Action(
                 label = if (mode == EditorMode.Live) "Hide markup on every line" else "Show markup on caret line",
@@ -212,15 +231,20 @@ private fun CompactHeaderActions(
             selectedIcon = VerseIcons.HeartFilled,
         )
         VerseIconButton(
-            icon = if (isRaw) VerseIcons.Eye else VerseIcons.Code,
-            contentDescription = if (isRaw) "Rendered editing mode" else "Raw markdown mode",
-            onClick = { onModeChange(if (isRaw) EditorMode.Preview else EditorMode.Raw) },
-            selected = isRaw,
+            icon = VerseIcons.Undo,
+            contentDescription = "Undo",
+            onClick = onUndo,
+            enabled = canUndo,
+        )
+        VerseIconButton(
+            icon = VerseIcons.Redo,
+            contentDescription = "Redo",
+            onClick = onRedo,
+            enabled = canRedo,
         )
         EditorOverflowButton(
             onAction = onOverflowAction,
             leadingEntries = extraEntries,
-            alignment = Alignment.TopEnd,
             fontSize = fontSize,
             onAdjustFontSize = onAdjustFontSize,
         )

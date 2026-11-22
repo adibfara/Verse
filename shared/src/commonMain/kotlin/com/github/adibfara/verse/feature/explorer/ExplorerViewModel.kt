@@ -34,6 +34,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
+private const val RecentFileLimit = 200
+
 class ExplorerViewModel(
     private val spaceRepository: SpaceRepository,
     private val sessionRepository: WorkspaceSessionRepository,
@@ -52,6 +54,7 @@ class ExplorerViewModel(
     private val expanded = mutableSetOf<FilePath>()
     private val watchers = mutableMapOf<FilePath, Job>()
     private val watchDebouncer = Debouncer(viewModelScope, 250L)
+    private var listJob: Job? = null
 
     private val fileSystem: SpaceFileSystem?
         get() = spaceRepository.current.value?.fileSystem
@@ -75,6 +78,7 @@ class ExplorerViewModel(
                         layoutMode = session.explorerLayoutMode,
                         dualPaneSelectedFolder = session.dualPaneSelectedFolder,
                         favoritesFilterEnabled = session.favoritesFilterEnabled,
+                        listMode = mutableState.value.listMode,
                     )
                     restoreExpanded()
                     loadDirectory(FilePath.Root)
@@ -86,6 +90,7 @@ class ExplorerViewModel(
                         session.dualPaneSelectedFolder?.let { selectDualPaneFolder(it) }
                     }
                     refreshFavoritedPaths()
+                    loadList()
                 }
             }
         }
@@ -94,6 +99,7 @@ class ExplorerViewModel(
                 .flatMapLatest { opened -> opened?.favorites?.paths ?: flowOf(emptySet()) }
                 .collect { paths ->
                     mutableState.value = mutableState.value.copy(favoritedPaths = paths)
+                    if (mutableState.value.listMode == ExplorerListMode.Favorites) loadList()
                 }
         }
     }
@@ -165,6 +171,58 @@ class ExplorerViewModel(
             is ExplorerEvent.SelectDualPaneFolder -> selectDualPaneFolder(event.path)
             ExplorerEvent.ToggleFavoritesFilter -> toggleFavoritesFilter()
             is ExplorerEvent.ToggleFavorite -> toggleFavorite(event.node)
+            is ExplorerEvent.SelectListMode -> selectListMode(event.mode)
+            ExplorerEvent.RefreshList -> loadList()
+            is ExplorerEvent.RevealFolder -> revealFolder(event.path)
+        }
+    }
+
+    private fun selectListMode(mode: ExplorerListMode) {
+        mutableState.value = mutableState.value.copy(listMode = mode)
+        loadList()
+    }
+
+    private fun revealFolder(path: FilePath) {
+        mutableState.value = mutableState.value.copy(listMode = ExplorerListMode.All)
+        viewModelScope.launch {
+            val ancestors = generateSequence(path) { it.parent }.filterNot { it.isRoot }.toList().reversed()
+            ancestors.forEach { ancestor ->
+                if (expanded.add(ancestor)) loadDirectory(ancestor)
+            }
+            persistExpanded()
+            mutableState.value = mutableState.value.copy(selectedPath = path)
+            rebuildRows()
+        }
+    }
+
+    private fun loadList() {
+        val mode = mutableState.value.listMode
+        if (mode == ExplorerListMode.All) return
+        val target = fileSystem ?: return
+        listJob?.cancel()
+        listJob = viewModelScope.launch {
+            mutableState.value = mutableState.value.copy(isListLoading = true)
+            when (mode) {
+                ExplorerListMode.Recent -> {
+                    val files = runCatching { target.listFilesRecursively() }.getOrElse { emptyList() }
+                        .filterNot { it.isDirectory }
+                        .sortedByDescending { it.lastModified }
+                        .take(RecentFileLimit)
+                    mutableState.value = mutableState.value.copy(recentFiles = files, isListLoading = false)
+                }
+
+                ExplorerListMode.Favorites -> {
+                    val nodes = mutableState.value.favoritedPaths
+                        .mapNotNull { path -> runCatching { target.metadata(path) }.getOrNull() }
+                        .sortedWith(
+                            compareByDescending<FileNode> { it.isDirectory }
+                                .thenBy { it.path.value.lowercase() },
+                        )
+                    mutableState.value = mutableState.value.copy(favoriteNodes = nodes, isListLoading = false)
+                }
+
+                ExplorerListMode.All -> Unit
+            }
         }
     }
 

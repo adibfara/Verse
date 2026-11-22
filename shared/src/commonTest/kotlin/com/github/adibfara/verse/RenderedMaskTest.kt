@@ -47,10 +47,10 @@ class RenderedMaskTest {
     }
 
     @Test
-    fun headingWithoutContentKeepsItsMarker() {
-        assertEquals("# ", rendered("# "))
+    fun anEmptyHeadingHidesItsMarkerOnlyOnceTheSpaceIsTyped() {
+        assertEquals("", rendered("# "))
         assertEquals("#", rendered("#"))
-        assertEquals("## \n\nbody", rendered("## \n\nbody"))
+        assertEquals("\n\nbody", rendered("## \n\nbody"))
     }
 
     @Test
@@ -109,8 +109,8 @@ class RenderedMaskTest {
     }
 
     @Test
-    fun typingThroughAHeadingRevealsAndHidesTheMarker() {
-        val steps = listOf("#" to "#", "# " to "# ", "# H" to "H", "# Hi" to "Hi")
+    fun typingThroughAHeadingHidesTheMarkerAtItsSpace() {
+        val steps = listOf("#" to "#", "# " to "", "# H" to "H", "# Hi" to "Hi")
         steps.forEach { (source, expected) ->
             assertEquals(expected, rendered(source), "unexpected rendering of \"$source\"")
         }

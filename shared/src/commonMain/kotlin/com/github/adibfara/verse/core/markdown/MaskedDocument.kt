@@ -17,6 +17,19 @@ class MaskedDocument(
     }
 }
 
+fun taskCaretRange(text: String, taskRange: MdRange): MdRange {
+    val end = taskRange.end
+    val spaced = end < text.length && text[end] == ' '
+    return if (spaced) MdRange(taskRange.start, end + 1) else taskRange
+}
+
+fun caretTargetForTaskRange(range: MdRange, caret: Int, previousCaret: Int?, tappedAfterPlaceholder: Boolean?): Int = when {
+    tappedAfterPlaceholder == true -> range.end
+    tappedAfterPlaceholder == false -> range.start
+    previousCaret != null && previousCaret >= range.end -> range.start
+    else -> range.end
+}
+
 fun maskDocument(
     document: MdDocument,
     edits: List<MaskEdit>,

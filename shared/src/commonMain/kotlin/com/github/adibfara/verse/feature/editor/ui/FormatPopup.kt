@@ -198,39 +198,39 @@ internal fun InlineFormatButtons(state: FormatPopupState, onAction: (FormatActio
 private fun LineMarkerButtons(state: FormatPopupState, onAction: (FormatAction) -> Unit) {
     val typography = VerseTheme.typography
     FormatButton(
-        selected = state.lineMarker == LineMarkerKind.Task,
+        selected = state.lineMarker == LineMarkerKind.Bullet,
         onClick = {
-            onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.Task))
+            onAction(FormatAction.SetLineMarker(LineMarkerKind.Bullet))
         },
     ) { color ->
         VerseIcon(
-            icon = VerseIcons.Check,
+            icon = VerseIcons.Bullet,
+            contentDescription = "Bulleted list",
+            tint = color,
+            size = VerseTheme.sizes.iconSmall,
+        )
+    }
+    FormatButton(
+        selected = state.lineMarker == LineMarkerKind.Task,
+        onClick = {
+            onAction(FormatAction.SetLineMarker(LineMarkerKind.Task))
+        },
+    ) { color ->
+        VerseIcon(
+            icon = VerseIcons.CheckSquare,
             contentDescription = "Checkbox",
             tint = color,
             size = VerseTheme.sizes.iconSmall,
         )
     }
     FormatButton(
-        selected = state.lineMarker == LineMarkerKind.Bullet,
-        onClick = {
-            onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.Bullet))
-        },
-    ) { color ->
-        VerseText(
-            text = "•",
-            style = typography.uiLabel.copy(fontWeight = FontWeight.Bold),
-            color = color,
-            maxLines = 1,
-        )
-    }
-    FormatButton(
         selected = state.lineMarker == LineMarkerKind.Ordered,
         onClick = {
-            onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.Ordered))
+            onAction(FormatAction.SetLineMarker(LineMarkerKind.Ordered))
         },
     ) { color ->
         VerseIcon(
-            icon = VerseIcons.ListOrdered,
+            icon = VerseIcons.Hash,
             contentDescription = "Numbered list",
             tint = color,
             size = VerseTheme.sizes.iconSmall,
@@ -239,7 +239,7 @@ private fun LineMarkerButtons(state: FormatPopupState, onAction: (FormatAction) 
     FormatButton(
         selected = state.lineMarker == LineMarkerKind.None,
         onClick = {
-            onAction(FormatAction.SetLineMarker(state.range.start, LineMarkerKind.None))
+            onAction(FormatAction.SetLineMarker(LineMarkerKind.None))
         },
     ) { color ->
         VerseText(

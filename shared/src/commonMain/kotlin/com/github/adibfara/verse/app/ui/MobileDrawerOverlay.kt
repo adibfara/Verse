@@ -63,6 +63,7 @@ fun MobileDrawerPanel(
                 modifier = Modifier.fillMaxSize(),
                 showToolbar = true,
                 showFooter = false,
+                showListModes = true,
             )
         }
     }

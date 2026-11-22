@@ -75,6 +75,7 @@ fun WorkspaceEffects(
         editorViewModel.actions.collect { action ->
             when (action) {
                 is EditorAction.Renamed -> tabsViewModel.onEvent(TabsEvent.Renamed(action.from, action.to))
+                is EditorAction.Missing -> tabsViewModel.onEvent(TabsEvent.Removed(action.path))
             }
         }
     }

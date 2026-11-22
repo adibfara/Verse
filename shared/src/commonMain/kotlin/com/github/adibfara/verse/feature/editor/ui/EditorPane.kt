@@ -41,9 +41,11 @@ import com.github.adibfara.verse.core.markdown.isAnchorTarget
 import com.github.adibfara.verse.core.markdown.inlineFormatsCovering
 import com.github.adibfara.verse.core.markdown.inlineLinkAt
 import com.github.adibfara.verse.core.markdown.lineMarkerKindAt
+import com.github.adibfara.verse.core.markdown.outlineOf
 import com.github.adibfara.verse.core.designsystem.component.VerseDivider
 import com.github.adibfara.verse.core.designsystem.component.VerseIconButton
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
+import com.github.adibfara.verse.core.designsystem.component.VerseText
 import com.github.adibfara.verse.core.designsystem.theme.VerseTheme
 import com.github.adibfara.verse.core.model.EditorMode
 import com.github.adibfara.verse.core.model.FileKind
@@ -161,6 +163,10 @@ fun EditorPane(
                 onRevealInFileManager = onRevealInFileManager,
                 onToggleFavorite = { onEvent(EditorEvent.ToggleFavorite) },
                 onToggleLock = { onEvent(EditorEvent.ToggleLock) },
+                canUndo = state.canUndo && !state.isLocked,
+                canRedo = state.canRedo && !state.isLocked,
+                onUndo = { onEvent(EditorEvent.Undo) },
+                onRedo = { onEvent(EditorEvent.Redo) },
                 leading = headerLeading,
                 isDarkTheme = isDarkTheme,
                 onToggleTheme = onToggleTheme,
@@ -201,6 +207,20 @@ fun EditorPane(
             VerseDivider()
         }
 
+        state.errorMessage?.let { message ->
+            VerseText(
+                text = message,
+                style = VerseTheme.typography.uiSmall,
+                color = colors.danger,
+                maxLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEvent(EditorEvent.DismissError) }
+                    .padding(horizontal = VerseTheme.spacing.lg, vertical = VerseTheme.spacing.sm),
+            )
+            VerseDivider()
+        }
+
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (state.hasFile && !state.kind.isEditable) {
                 EditorTitleBar(
@@ -229,6 +249,17 @@ fun EditorPane(
                         horizontalPadding = contentHorizontalPadding,
                         showFormatPopup = showFormatPopup,
                         readOnly = state.isLocked,
+                    )
+                }
+
+                val outline = remember(state.document) { outlineOf(state.document) }
+                if (state.hasFile && state.kind == FileKind.Markdown && outline.size >= 2) {
+                    DocumentOutline(
+                        entries = outline,
+                        onJump = { onEvent(EditorEvent.JumpToHeading(it.offset)) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(VerseTheme.spacing.sm),
                     )
                 }
 
@@ -294,6 +325,7 @@ private fun EditorContent(
     val scrollState = remember(state.path) { ScrollState(0) }
     val interactionSource = remember { MutableInteractionSource() }
     val onValueChange: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it)) }
+    val onImeFixup: (TextFieldValue) -> Unit = { onEvent(EditorEvent.TextChanged(it, parseNow = true)) }
     val openLink: (String) -> Unit = { target ->
         if (isAnchorTarget(target)) onEvent(EditorEvent.JumpToAnchor(target)) else onOpenLink(target)
     }
@@ -345,6 +377,7 @@ private fun EditorContent(
                     value = state.value,
                     document = state.document,
                     onValueChange = onValueChange,
+                    onImeFixup = onImeFixup,
                     onToggleTask = onToggleTask,
                     onOpenLink = openLink,
                     onFormat = onFormat,
@@ -353,6 +386,8 @@ private fun EditorContent(
                     showFormatPopup = showFormatPopup && !readOnly,
                     readOnly = readOnly,
                     continueLists = continueLists,
+                    revealRequest = state.revealRequest,
+                    viewportHeight = viewportHeight,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -360,6 +395,7 @@ private fun EditorContent(
                     value = state.value,
                     document = state.document,
                     onValueChange = onValueChange,
+                    onImeFixup = onImeFixup,
                     onToggleTask = onToggleTask,
                     onOpenLink = openLink,
                     onFormat = onFormat,
@@ -368,17 +404,22 @@ private fun EditorContent(
                     showFormatPopup = showFormatPopup && !readOnly,
                     readOnly = readOnly,
                     continueLists = continueLists,
+                    revealRequest = state.revealRequest,
+                    viewportHeight = viewportHeight,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 EditorMode.Raw -> RawMarkdownField(
                     value = state.value,
                     onValueChange = onValueChange,
+                    onImeFixup = onImeFixup,
                     onFormat = onFormat,
                     onBackspaceAtStart = if (readOnly) null else jumpToTitle,
                     focusRequester = focusRequester,
                     readOnly = readOnly,
                     continueLists = continueLists,
+                    revealRequest = state.revealRequest,
+                    viewportHeight = viewportHeight,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -460,22 +501,22 @@ private fun FormatToolbarButtons(
     val caretOffset = state.value.selection.start.coerceIn(0, text.length)
     val currentLineMarker = remember(text, caretOffset) { lineMarkerKindAt(text, caretOffset) }
     VerseIconButton(
-        icon = VerseIcons.Check,
-        contentDescription = "Checklist",
-        selected = currentLineMarker == LineMarkerKind.Task,
-        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Task)) },
-    )
-    VerseIconButton(
-        icon = VerseIcons.Layers,
+        icon = VerseIcons.Bullet,
         contentDescription = "Bulleted list",
         selected = currentLineMarker == LineMarkerKind.Bullet,
-        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Bullet)) },
+        onClick = { onFormat(FormatAction.SetLineMarker(LineMarkerKind.Bullet)) },
     )
     VerseIconButton(
-        icon = VerseIcons.ListOrdered,
+        icon = VerseIcons.CheckSquare,
+        contentDescription = "Checklist",
+        selected = currentLineMarker == LineMarkerKind.Task,
+        onClick = { onFormat(FormatAction.SetLineMarker(LineMarkerKind.Task)) },
+    )
+    VerseIconButton(
+        icon = VerseIcons.Hash,
         contentDescription = "Numbered list",
         selected = currentLineMarker == LineMarkerKind.Ordered,
-        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Ordered)) },
+        onClick = { onFormat(FormatAction.SetLineMarker(LineMarkerKind.Ordered)) },
     )
     InlineFormatButtons(state = popupState, onAction = onFormat)
 }

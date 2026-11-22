@@ -61,6 +61,12 @@ sealed interface ExplorerEvent {
     data object ToggleFavoritesFilter : ExplorerEvent
 
     data class ToggleFavorite(val node: FileNode) : ExplorerEvent
+
+    data class SelectListMode(val mode: ExplorerListMode) : ExplorerEvent
+
+    data object RefreshList : ExplorerEvent
+
+    data class RevealFolder(val path: FilePath) : ExplorerEvent
 }
 
 sealed interface ExplorerAction {

@@ -16,11 +16,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.input.TextFieldValue
@@ -65,6 +69,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
 import com.github.adibfara.verse.core.designsystem.theme.VerseTheme
 import com.github.adibfara.verse.core.markdown.FormatAction
+import com.github.adibfara.verse.feature.editor.RevealRequest
 import com.github.adibfara.verse.core.markdown.LineMarkerKind
 import com.github.adibfara.verse.core.markdown.MaskedDocument
 import com.github.adibfara.verse.core.markdown.MdCodeBlock
@@ -77,6 +82,11 @@ import com.github.adibfara.verse.core.markdown.QuoteIndentSpaces
 import com.github.adibfara.verse.core.markdown.SpecialSpanKind
 import com.github.adibfara.verse.core.markdown.StyleKind
 import com.github.adibfara.verse.core.markdown.TaskBoxPlaceholder
+import com.github.adibfara.verse.core.markdown.caretAfterTaskMarker
+import com.github.adibfara.verse.core.markdown.caretTargetForTaskRange
+import com.github.adibfara.verse.core.markdown.taskCaretRange
+import com.github.adibfara.verse.core.platform.ImeBufferMirror
+import com.github.adibfara.verse.core.platform.ListAwareImeInput
 import com.github.adibfara.verse.core.markdown.headingLevelAt
 import com.github.adibfara.verse.core.markdown.inlineFormatsCovering
 import com.github.adibfara.verse.core.markdown.inlineLinkAt
@@ -94,6 +104,7 @@ fun RenderedMarkdownField(
     value: TextFieldValue,
     document: MdDocument,
     onValueChange: (TextFieldValue) -> Unit,
+    onImeFixup: (TextFieldValue) -> Unit = onValueChange,
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
@@ -102,6 +113,8 @@ fun RenderedMarkdownField(
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
     continueLists: Boolean = true,
+    revealRequest: RevealRequest? = null,
+    viewportHeight: Dp = Dp.Unspecified,
     modifier: Modifier = Modifier,
 ) {
     MaskedMarkdownField(
@@ -109,6 +122,7 @@ fun RenderedMarkdownField(
         document = document,
         revealedLine = null,
         onValueChange = onValueChange,
+        onImeFixup = onImeFixup,
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
@@ -117,6 +131,8 @@ fun RenderedMarkdownField(
         showFormatPopup = showFormatPopup,
         readOnly = readOnly,
         continueLists = continueLists,
+        revealRequest = revealRequest,
+        viewportHeight = viewportHeight,
         modifier = modifier,
     )
 }
@@ -126,6 +142,7 @@ fun LiveMarkdownField(
     value: TextFieldValue,
     document: MdDocument,
     onValueChange: (TextFieldValue) -> Unit,
+    onImeFixup: (TextFieldValue) -> Unit = onValueChange,
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
@@ -134,6 +151,8 @@ fun LiveMarkdownField(
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
     continueLists: Boolean = true,
+    revealRequest: RevealRequest? = null,
+    viewportHeight: Dp = Dp.Unspecified,
     modifier: Modifier = Modifier,
 ) {
     val revealedLine = remember(value.text, value.selection.start) {
@@ -144,6 +163,7 @@ fun LiveMarkdownField(
         document = document,
         revealedLine = revealedLine,
         onValueChange = onValueChange,
+        onImeFixup = onImeFixup,
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
@@ -152,6 +172,8 @@ fun LiveMarkdownField(
         showFormatPopup = showFormatPopup,
         readOnly = readOnly,
         continueLists = continueLists,
+        revealRequest = revealRequest,
+        viewportHeight = viewportHeight,
         modifier = modifier,
     )
 }
@@ -163,6 +185,7 @@ private fun MaskedMarkdownField(
     document: MdDocument,
     revealedLine: MdRange?,
     onValueChange: (TextFieldValue) -> Unit,
+    onImeFixup: (TextFieldValue) -> Unit,
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
@@ -171,6 +194,8 @@ private fun MaskedMarkdownField(
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
     continueLists: Boolean = true,
+    revealRequest: RevealRequest? = null,
+    viewportHeight: Dp = Dp.Unspecified,
     modifier: Modifier = Modifier,
 ) {
     val styles = rememberMarkdownStyles()
@@ -186,6 +211,8 @@ private fun MaskedMarkdownField(
 
     val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
     val column = remember { CaretColumn() }
+    val lastCaret = remember { mutableStateOf(value.selection.start) }
+    val tapCaret = remember { mutableStateOf<Int?>(null) }
     val currentMasked = rememberUpdatedState(masked)
     val currentValue = rememberUpdatedState(value)
     val currentValueChange = rememberUpdatedState(onValueChange)
@@ -200,6 +227,7 @@ private fun MaskedMarkdownField(
                 layoutOf = { layout.value },
                 column = column,
                 toggleOnText = readOnly,
+                onTapOffset = { tapCaret.value = it },
                 onToggleTask = { range, checked -> currentToggleTask.value(range, checked) },
                 onOpenLink = { target -> currentOpenLink.value(target) },
                 onCopyCode = { code -> clipboard.setText(AnnotatedString(code)) },
@@ -249,12 +277,17 @@ private fun MaskedMarkdownField(
         )
     }
     val currentFormat = rememberUpdatedState(onFormat)
-    val listEnter = remember(continueLists) {
+    val listKeys = remember(continueLists) {
         if (continueLists) {
-            Modifier.enterContinuesList(
-                valueOf = { currentValue.value },
-                onFormat = { action -> currentFormat.value(action) },
-            )
+            Modifier
+                .enterContinuesList(
+                    valueOf = { currentValue.value },
+                    onFormat = { action -> currentFormat.value(action) },
+                )
+                .backspaceRemovesTaskMarker(
+                    valueOf = { currentValue.value },
+                    onFormat = { action -> currentFormat.value(action) },
+                )
         } else {
             Modifier
         }
@@ -270,9 +303,25 @@ private fun MaskedMarkdownField(
     val keyboardInset = WindowInsets.ime.getBottom(density)
     val bringCaretIntoView = remember { BringIntoViewRequester() }
     val lastBroughtCaret = remember { mutableStateOf<Pair<Int, Int>?>(null) }
-    LaunchedEffect(value.selection.start, layout.value, keyboardInset) {
+    val lastReveal = remember { mutableStateOf<Int?>(null) }
+    val highlight = remember { RevealHighlight() }
+    val highlightScope = rememberCoroutineScope()
+    val viewportPx = if (viewportHeight == Dp.Unspecified) 0f else with(density) { viewportHeight.toPx() }
+    LaunchedEffect(value.selection.start, layout.value, keyboardInset, revealRequest) {
         val result = layout.value ?: return@LaunchedEffect
         val key = value.selection.start to keyboardInset
+        val reveal = revealRequest?.takeIf {
+            it.id != lastReveal.value && it.offset == value.selection.start && viewportPx > 0f
+        }
+        if (reveal != null) {
+            val caret = caretBoundsOf(masked, result, value.selection.start, caretMargin)
+            val line = lineRangeAt(value.text, value.selection.start)
+            highlightScope.launch { highlight.breathe(line) }
+            bringCaretIntoView.bringIntoView(caret.copy(bottom = caret.top + viewportPx))
+            lastReveal.value = reveal.id
+            lastBroughtCaret.value = key
+            return@LaunchedEffect
+        }
         if (lastBroughtCaret.value == key) return@LaunchedEffect
         lastBroughtCaret.value = key
         bringCaretIntoView.bringIntoView(
@@ -280,32 +329,58 @@ private fun MaskedMarkdownField(
         )
     }
 
+    val imeMirror = remember { ImeBufferMirror() }
+    SideEffect { imeMirror.update(value.text, value.selection.start, value.selection.end) }
+
     Box(modifier = modifier) {
-        BasicTextField(
-            value = value,
-            onValueChange = { next ->
-                if (next.text != value.text) column.x = null
-                onValueChange(next)
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .bringIntoViewRequester(bringCaretIntoView)
-                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-                .then(taps)
-                .pointerHoverIcon(
-                    icon = if (overTarget.value) PointerIcon.Hand else PointerIcon.Default,
-                    overrideDescendants = overTarget.value,
-                )
-                .then(decorations)
-                .then(caretKeys)
-                .then(listEnter)
-                .then(topKeys),
-            textStyle = textStyle,
-            cursorBrush = cursorBrush,
-            visualTransformation = transformation,
-            onTextLayout = { layout.value = it },
-            readOnly = readOnly,
-        )
+        ListAwareImeInput(mirror = imeMirror, enabled = continueLists && !readOnly) {
+            BasicTextField(
+                value = value,
+                onValueChange = { next ->
+                    imeMirror.update(next.text, next.selection.start, next.selection.end)
+                    if (next.text != value.text) {
+                        column.x = null
+                        tapCaret.value = null
+                    }
+                    val snapped = snapTaskCaret(
+                        next = next,
+                        previousCaret = lastCaret.value,
+                        tapOffset = tapCaret.value,
+                        masked = currentMasked.value,
+                        revealedLine = revealedLine,
+                    )
+                    tapCaret.value = null
+                    lastCaret.value = snapped.selection.start
+                    if (imeMirror.applyingFixup) onImeFixup(snapped) else onValueChange(snapped)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(bringCaretIntoView)
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    .then(taps)
+                    .pointerHoverIcon(
+                        icon = if (overTarget.value) PointerIcon.Hand else PointerIcon.Default,
+                        overrideDescendants = overTarget.value,
+                    )
+                    .drawRevealHighlight(
+                        highlight = highlight,
+                        layoutOf = { layout.value },
+                        toTransformed = { currentMasked.value.mask.originalToTransformed(it) },
+                        color = colors.accent,
+                        padding = VerseTheme.spacing.xs,
+                        radius = VerseTheme.spacing.xs,
+                    )
+                    .then(decorations)
+                    .then(caretKeys)
+                    .then(listKeys)
+                    .then(topKeys),
+                textStyle = textStyle,
+                cursorBrush = cursorBrush,
+                visualTransformation = transformation,
+                onTextLayout = { layout.value = it },
+                readOnly = readOnly,
+            )
+        }
 
         MarkdownOverlays(
             masked = masked,
@@ -435,11 +510,14 @@ private fun markerGlyphRange(masked: MaskedDocument, line: MdRange): MdRange? {
 fun RawMarkdownField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
+    onImeFixup: (TextFieldValue) -> Unit = onValueChange,
     onFormat: (FormatAction) -> Unit,
     onBackspaceAtStart: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     readOnly: Boolean = false,
     continueLists: Boolean = true,
+    revealRequest: RevealRequest? = null,
+    viewportHeight: Dp = Dp.Unspecified,
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
@@ -451,12 +529,17 @@ fun RawMarkdownField(
     val currentValue = rememberUpdatedState(value)
     val currentBackspaceAtStart = rememberUpdatedState(onBackspaceAtStart)
     val currentFormat = rememberUpdatedState(onFormat)
-    val listEnter = remember(continueLists) {
+    val listKeys = remember(continueLists) {
         if (continueLists) {
-            Modifier.enterContinuesList(
-                valueOf = { currentValue.value },
-                onFormat = { action -> currentFormat.value(action) },
-            )
+            Modifier
+                .enterContinuesList(
+                    valueOf = { currentValue.value },
+                    onFormat = { action -> currentFormat.value(action) },
+                )
+                .backspaceRemovesTaskMarker(
+                    valueOf = { currentValue.value },
+                    onFormat = { action -> currentFormat.value(action) },
+                )
         } else {
             Modifier
         }
@@ -467,25 +550,53 @@ fun RawMarkdownField(
             handlerOf = { currentBackspaceAtStart.value },
         )
     }
-    LaunchedEffect(value.selection.start, layout.value, keyboardInset) {
+    val lastReveal = remember { mutableStateOf<Int?>(null) }
+    val highlight = remember { RevealHighlight() }
+    val highlightScope = rememberCoroutineScope()
+    val viewportPx = if (viewportHeight == Dp.Unspecified) 0f else with(density) { viewportHeight.toPx() }
+    LaunchedEffect(value.selection.start, layout.value, keyboardInset, revealRequest) {
         val result = layout.value ?: return@LaunchedEffect
-        bringCaretIntoView.bringIntoView(
-            plainCaretBoundsOf(result, value.selection.start, caretMargin),
+        val caret = plainCaretBoundsOf(result, value.selection.start, caretMargin)
+        val reveal = revealRequest?.takeIf {
+            it.id != lastReveal.value && it.offset == value.selection.start && viewportPx > 0f
+        }
+        if (reveal != null) {
+            val line = lineRangeAt(value.text, value.selection.start)
+            highlightScope.launch { highlight.breathe(line) }
+            bringCaretIntoView.bringIntoView(caret.copy(bottom = caret.top + viewportPx))
+            lastReveal.value = reveal.id
+            return@LaunchedEffect
+        }
+        bringCaretIntoView.bringIntoView(caret)
+    }
+        val imeMirror = remember { ImeBufferMirror() }
+    SideEffect { imeMirror.update(value.text, value.selection.start, value.selection.end) }
+    ListAwareImeInput(mirror = imeMirror, enabled = continueLists && !readOnly) {
+        BasicTextField(
+            value = value,
+            onValueChange = { next ->
+                imeMirror.update(next.text, next.selection.start, next.selection.end)
+                if (imeMirror.applyingFixup) onImeFixup(next) else onValueChange(next)
+            },
+            modifier = modifier
+                .bringIntoViewRequester(bringCaretIntoView)
+                .drawRevealHighlight(
+                    highlight = highlight,
+                    layoutOf = { layout.value },
+                    toTransformed = { it },
+                    color = colors.accent,
+                    padding = VerseTheme.spacing.xs,
+                    radius = VerseTheme.spacing.xs,
+                )
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                .then(listKeys)
+                .then(topKeys),
+            textStyle = VerseTheme.typography.editorRaw.copy(color = colors.textPrimary),
+            cursorBrush = SolidColor(colors.caret),
+            onTextLayout = { layout.value = it },
+            readOnly = readOnly,
         )
     }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier
-            .bringIntoViewRequester(bringCaretIntoView)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .then(listEnter)
-            .then(topKeys),
-        textStyle = VerseTheme.typography.editorRaw.copy(color = colors.textPrimary),
-        cursorBrush = SolidColor(colors.caret),
-        onTextLayout = { layout.value = it },
-        readOnly = readOnly,
-    )
 }
 
 private class CaretColumn {
@@ -498,11 +609,35 @@ private sealed interface TapTarget {
     data class CopyCode(val block: MdCodeBlock) : TapTarget
 }
 
+private fun snapTaskCaret(
+    next: TextFieldValue,
+    previousCaret: Int,
+    tapOffset: Int?,
+    masked: MaskedDocument,
+    revealedLine: MdRange?,
+): TextFieldValue {
+    if (!next.selection.collapsed) return next
+    val caret = next.selection.start
+    val task = masked.tasks.firstOrNull { task ->
+        val range = taskCaretRange(next.text, task.range)
+        range.start < caret &&
+            caret < range.end &&
+            (revealedLine == null || !task.range.overlaps(revealedLine))
+    } ?: return next
+    val tappedAfter = tapOffset?.let { offset ->
+        offset > masked.mask.originalToTransformed(task.range.start)
+    }
+    val target = caretTargetForTaskRange(taskCaretRange(next.text, task.range), caret, previousCaret, tappedAfter)
+    if (target == caret) return next
+    return next.copy(selection = TextRange(target))
+}
+
 private fun Modifier.markdownTaps(
     maskedOf: () -> MaskedDocument,
     layoutOf: () -> TextLayoutResult?,
     column: CaretColumn,
     toggleOnText: Boolean,
+    onTapOffset: (Int) -> Unit,
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onCopyCode: (String) -> Unit,
@@ -513,6 +648,7 @@ private fun Modifier.markdownTaps(
         column.x = null
         val layout = layoutOf() ?: return@awaitEachGesture
         val masked = maskedOf()
+        onTapOffset(layout.getOffsetForPosition(down.position))
         val target = targetAt(masked, layout, down.position, toggleOnText) ?: return@awaitEachGesture
         down.consume()
         var last = down.position
@@ -971,11 +1107,31 @@ private fun Modifier.enterContinuesList(
     if (event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
         return@onPreviewKeyEvent false
     }
+    val caret = listContinuationCaret(valueOf()) ?: return@onPreviewKeyEvent false
+    onFormat(FormatAction.ContinueList(caret))
+    true
+}
+
+internal fun listContinuationCaret(value: TextFieldValue): Int? {
+    if (!value.selection.collapsed) return null
+    val caret = value.selection.start.coerceIn(0, value.text.length)
+    if (lineMarkerKindAt(value.text, caret) == LineMarkerKind.None) return null
+    return caret
+}
+
+private fun Modifier.backspaceRemovesTaskMarker(
+    valueOf: () -> TextFieldValue,
+    onFormat: (FormatAction) -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    if (event.key != Key.Backspace) return@onPreviewKeyEvent false
+    if (event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
+        return@onPreviewKeyEvent false
+    }
     val value = valueOf()
     if (!value.selection.collapsed) return@onPreviewKeyEvent false
-    val caret = value.selection.start.coerceIn(0, value.text.length)
-    if (lineMarkerKindAt(value.text, caret) == LineMarkerKind.None) return@onPreviewKeyEvent false
-    onFormat(FormatAction.ContinueList(caret))
+    if (!caretAfterTaskMarker(value.text, value.selection.start)) return@onPreviewKeyEvent false
+    onFormat(FormatAction.DeleteTaskMarker(value.selection.start))
     true
 }
 

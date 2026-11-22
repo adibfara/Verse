@@ -23,21 +23,27 @@ data class EditorUiState(
     val errorMessage: String? = null,
     val focusContentRequestId: Int? = null,
     val focusTitleRequestId: Int? = null,
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val revealRequest: RevealRequest? = null,
 ) {
     val hasFile: Boolean get() = path != null
 }
+
+data class RevealRequest(val offset: Int, val id: Int)
 
 sealed interface EditorEvent {
     data class Open(val path: FilePath, val kind: FileKind) : EditorEvent
     data class RequestFocusContent(val path: FilePath) : EditorEvent
     data class Close(val path: FilePath) : EditorEvent
-    data class TextChanged(val value: TextFieldValue) : EditorEvent
+    data class TextChanged(val value: TextFieldValue, val parseNow: Boolean = false) : EditorEvent
     data class SetMode(val mode: EditorMode) : EditorEvent
     data object ToggleLivePreview : EditorEvent
     data object ToggleRawMode : EditorEvent
     data object Save : EditorEvent
     data class ToggleTask(val range: MdRange, val checked: Boolean) : EditorEvent
     data class JumpToAnchor(val target: String) : EditorEvent
+    data class JumpToHeading(val offset: Int) : EditorEvent
     data class ApplyFormat(val action: FormatAction) : EditorEvent
     data class Renamed(val from: FilePath, val to: FilePath) : EditorEvent
     data class ReportError(val message: String) : EditorEvent
@@ -48,8 +54,11 @@ sealed interface EditorEvent {
     data class RequestRename(val name: String) : EditorEvent
     data object StartNoteBody : EditorEvent
     data object JumpToTitle : EditorEvent
+    data object Undo : EditorEvent
+    data object Redo : EditorEvent
 }
 
 sealed interface EditorAction {
     data class Renamed(val from: FilePath, val to: FilePath) : EditorAction
+    data class Missing(val path: FilePath) : EditorAction
 }

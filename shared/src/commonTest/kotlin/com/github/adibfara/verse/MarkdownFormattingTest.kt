@@ -8,14 +8,24 @@ import com.github.adibfara.verse.core.markdown.MdRange
 import com.github.adibfara.verse.core.markdown.SpecialSpanKind
 import com.github.adibfara.verse.core.markdown.TextEdit
 import com.github.adibfara.verse.core.markdown.applyFormatAction
+import com.github.adibfara.verse.core.markdown.caretAfterTaskMarker
+import com.github.adibfara.verse.core.markdown.caretTargetForTaskRange
+import com.github.adibfara.verse.core.markdown.compositionThroughEdit
 import com.github.adibfara.verse.core.markdown.continueListAfterNewline
 import com.github.adibfara.verse.core.markdown.headingLevelAt
 import com.github.adibfara.verse.core.markdown.inlineFormatsCovering
 import com.github.adibfara.verse.core.markdown.insertedNewlineOffset
 import com.github.adibfara.verse.core.markdown.lineMarkerKindAt
 import com.github.adibfara.verse.core.markdown.specialSpanAt
+import com.github.adibfara.verse.core.markdown.taskMarkerBackspaceEdit
+import com.github.adibfara.verse.core.markdown.taskCaretRange
+import com.github.adibfara.verse.core.markdown.imeBatchFixup
+import com.github.adibfara.verse.feature.editor.ui.listContinuationCaret
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -86,7 +96,7 @@ class MarkdownFormattingTest {
         val task = applyFormatAction(
             text = "- milk",
             selection = MdRange(4, 4),
-            action = FormatAction.SetLineMarker(0, LineMarkerKind.Task),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Task),
         )
         assertEquals("- [ ] milk", task.text)
         assertEquals("- [ ] mi", task.text.substring(0, task.selection.start))
@@ -155,31 +165,31 @@ class MarkdownFormattingTest {
     fun lineMarkerCyclesBetweenTaskBulletAndNone() {
         assertEquals(
             "- [ ] milk",
-            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Task)).text,
+            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Task)).text,
         )
         assertEquals(
             "- milk",
-            applyFormatAction("- [ ] milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Bullet)).text,
+            applyFormatAction("- [ ] milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Bullet)).text,
         )
         assertEquals(
             "milk",
-            applyFormatAction("- [x] milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.None)).text,
+            applyFormatAction("- [x] milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.None)).text,
         )
         assertEquals(
             "- [ ] milk",
-            applyFormatAction("milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Task)).text,
+            applyFormatAction("milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Task)).text,
         )
     }
 
     @Test
-    fun lineMarkerKeepsIndentationAndOrderedMarkersAndCheckedState() {
+    fun lineMarkerKeepsIndentationAndOrderedMarkersReplaceCheckboxes() {
         assertEquals(
-            "  1. [x] step",
-            applyFormatAction("  1. [x] step", MdRange(0, 0), FormatAction.SetLineMarker(2, LineMarkerKind.Ordered)).text,
+            "  1. step",
+            applyFormatAction("  1. [x] step", MdRange(2, 2), FormatAction.SetLineMarker(LineMarkerKind.Ordered)).text,
         )
         assertEquals(
             "  1. step",
-            applyFormatAction("  1. [x] step", MdRange(0, 0), FormatAction.SetLineMarker(2, LineMarkerKind.Bullet)).text,
+            applyFormatAction("  1. [x] step", MdRange(2, 2), FormatAction.SetLineMarker(LineMarkerKind.Bullet)).text,
         )
     }
 
@@ -187,14 +197,14 @@ class MarkdownFormattingTest {
     fun settingOrderedOnABulletStartsCountingFromOne() {
         assertEquals(
             "1. milk",
-            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Ordered)).text,
+            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Ordered)).text,
         )
     }
 
     @Test
     fun settingOrderedContinuesFromThePreviousSiblingNumber() {
         val text = "1. first\n- second"
-        val edit = applyFormatAction(text, MdRange(0, 0), FormatAction.SetLineMarker(9, LineMarkerKind.Ordered))
+        val edit = applyFormatAction(text, MdRange(9, 9), FormatAction.SetLineMarker(LineMarkerKind.Ordered))
         assertEquals("1. first\n2. second", edit.text)
     }
 
@@ -202,15 +212,15 @@ class MarkdownFormattingTest {
     fun reapplyingALineMarkerTogglesItOff() {
         assertEquals(
             "step",
-            applyFormatAction("3) step", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Ordered)).text,
+            applyFormatAction("3) step", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Ordered)).text,
         )
         assertEquals(
             "milk",
-            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Bullet)).text,
+            applyFormatAction("- milk", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Bullet)).text,
         )
         assertEquals(
             "done",
-            applyFormatAction("- [x] done", MdRange(0, 0), FormatAction.SetLineMarker(0, LineMarkerKind.Task)).text,
+            applyFormatAction("- [x] done", MdRange(0, 0), FormatAction.SetLineMarker(LineMarkerKind.Task)).text,
         )
     }
 
@@ -404,11 +414,239 @@ class MarkdownFormattingTest {
         assertNull(insertedNewlineOffset("", ""))
     }
 
+    private fun backspaceAfter(text: String, caret: Int): TextEdit =
+        applyFormatAction(
+            text = text,
+            selection = MdRange(caret, caret),
+            action = FormatAction.DeleteTaskMarker(caret),
+        )
+
+    @Test
+    fun backspaceAfterACheckboxDeletesTheWholeTaskPrefix() {
+        val edit = backspaceAfter("- [ ] milk", 5)
+        assertEquals("milk", edit.text)
+        assertEquals(MdRange(0, 0), edit.selection)
+    }
+
+    @Test
+    fun backspaceAfterACheckedCheckboxDeletesTheWholeTaskPrefix() {
+        val edit = backspaceAfter("- [x] milk", 5)
+        assertEquals("milk", edit.text)
+        assertEquals(MdRange(0, 0), edit.selection)
+    }
+
+    @Test
+    fun backspaceAfterACheckboxKeepsTheIndentAndTheOrderedMarker() {
+        val indented = backspaceAfter("  - [ ] milk", 7)
+        assertEquals("  milk", indented.text)
+        assertEquals(MdRange(2, 2), indented.selection)
+
+        val ordered = backspaceAfter("1. [ ] milk", 6)
+        assertEquals("milk", ordered.text)
+        assertEquals(MdRange(0, 0), ordered.selection)
+    }
+
+    @Test
+    fun backspaceAfterAnEmptyCheckboxEmptiesTheLine() {
+        val edit = backspaceAfter("- [ ] ", 5)
+        assertEquals("", edit.text)
+        assertEquals(MdRange(0, 0), edit.selection)
+    }
+
+    @Test
+    fun backspaceAnywhereButRightAfterTheCheckboxChangesNothing() {
+        val inTheContent = backspaceAfter("- [ ] milk", 7)
+        assertEquals("- [ ] milk", inTheContent.text)
+        assertEquals(MdRange(7, 7), inTheContent.selection)
+
+        val pastTheSpace = backspaceAfter("- [ ] milk", 6)
+        assertEquals("milk", pastTheSpace.text)
+        assertEquals(MdRange(0, 0), pastTheSpace.selection)
+
+        val bullet = backspaceAfter("- milk", 2)
+        assertEquals("- milk", bullet.text)
+        assertEquals(MdRange(2, 2), bullet.selection)
+    }
+
+    @Test
+    fun aCaretIsAfterATaskMarkerBetweenTheClosingBracketAndTheContent() {
+        assertTrue(caretAfterTaskMarker("- [ ] milk", 5))
+        assertTrue(caretAfterTaskMarker("- [x] milk", 5))
+        assertTrue(caretAfterTaskMarker("- [ ]", 5))
+        assertTrue(caretAfterTaskMarker("- [ ] milk", 6))
+        assertFalse(caretAfterTaskMarker("- [ ] milk", 7))
+        assertFalse(caretAfterTaskMarker("- milk", 2))
+        assertFalse(caretAfterTaskMarker("- [ ] milk", 0))
+    }
+
+    @Test
+    fun aCaretInsideACheckboxSnapsToTheSideItCameFrom() {
+        val range = MdRange(2, 5)
+        assertEquals(2, caretTargetForTaskRange(range, 3, previousCaret = 8, tappedAfterPlaceholder = null))
+        assertEquals(2, caretTargetForTaskRange(range, 3, previousCaret = 5, tappedAfterPlaceholder = null))
+        assertEquals(5, caretTargetForTaskRange(range, 3, previousCaret = 0, tappedAfterPlaceholder = null))
+        assertEquals(5, caretTargetForTaskRange(range, 3, previousCaret = null, tappedAfterPlaceholder = null))
+        assertEquals(5, caretTargetForTaskRange(range, 3, previousCaret = 8, tappedAfterPlaceholder = true))
+        assertEquals(2, caretTargetForTaskRange(range, 3, previousCaret = 8, tappedAfterPlaceholder = false))
+    }
+
+    @Test
+    fun theCaretAfterACheckboxLandsPastItsSpaceSoTypingKeepsTheTask() {
+        val text = "- [ ] milk"
+        val task = parser.parse(text).tasks.single()
+        val range = taskCaretRange(text, task.range)
+        assertEquals(MdRange(2, 6), range)
+        assertEquals(6, caretTargetForTaskRange(range, 5, previousCaret = null, tappedAfterPlaceholder = true))
+        assertEquals(2, caretTargetForTaskRange(range, 5, previousCaret = 6, tappedAfterPlaceholder = null))
+        assertEquals(6, caretTargetForTaskRange(range, 5, previousCaret = 2, tappedAfterPlaceholder = null))
+        val typed = text.substring(0, 6) + "x" + text.substring(6)
+        assertEquals(1, parser.parse(typed).tasks.size)
+        assertEquals(MdRange(2, 5), taskCaretRange("- [ ]", MdRange(2, 5)))
+    }
+
+    @Test
+    fun anImeBatchThatInsertsANewlineIsContinuedAfterTheFact() {
+        val text = "- [ ] milk"
+        assertEquals(text.length, listContinuationCaret(TextFieldValue(text, selection = TextRange(text.length))))
+        val fixup = imeBatchFixup(text, "$text\n", MdRange(11, 11))
+        assertEquals("$text\n- [ ] ", fixup?.text)
+        assertEquals(MdRange(17, 17), fixup?.selection)
+        assertNull(imeBatchFixup(text, "$text!", MdRange(11, 11)))
+        assertNull(imeBatchFixup("plain", "plain\n", MdRange(6, 6)))
+    }
+
+    @Test
+    fun aCheckboxTheImeShortenedIsCompletedToTheWholePrefix() {
+        val edit = taskMarkerBackspaceEdit(
+            before = "- [ ] milk",
+            after = "- [  milk",
+            selection = MdRange(4, 4),
+        )
+        assertEquals("milk", edit!!.text)
+        assertEquals(MdRange(0, 0), edit.selection)
+    }
+
+    @Test
+    fun aCheckboxTheImeDeletedWholeIsCompletedToo() {
+        val edit = taskMarkerBackspaceEdit(
+            before = "- [ ] milk",
+            after = "-  milk",
+            selection = MdRange(2, 2),
+        )
+        assertEquals("milk", edit!!.text)
+        assertEquals(MdRange(0, 0), edit.selection)
+    }
+
+    @Test
+    fun anImeDeletionOutsideTheCheckboxChangesNothing() {
+        assertNull(taskMarkerBackspaceEdit("- [ ] milk", "- [ ]milk", MdRange(5, 5)))
+        assertNull(taskMarkerBackspaceEdit("- [ ] milk", "- [ ilk", MdRange(4, 4)))
+        assertNull(taskMarkerBackspaceEdit("hello", "helo", MdRange(3, 3)))
+        assertNull(taskMarkerBackspaceEdit("- milk", "- mil", MdRange(4, 4)))
+        assertNull(taskMarkerBackspaceEdit("- [ ] milk", "- [ ] milk!", MdRange(9, 9)))
+        assertNull(taskMarkerBackspaceEdit("- [ ] milk", "-  milk", MdRange(2, 4)))
+    }
+
+    @Test
+    fun anEditAwayFromTheCompositionShiftsIt() {
+        assertEquals(MdRange(2, 6), compositionThroughEdit("- milk\n", "- milk\n- ", MdRange(2, 6)))
+        assertEquals(MdRange(4, 6), compositionThroughEdit("milk", "- milk", MdRange(2, 4)))
+        assertEquals(MdRange(6, 10), compositionThroughEdit("- [ ] milk", "- [ ] milk!!", MdRange(6, 10)))
+        assertEquals(MdRange(0, 4), compositionThroughEdit("- [ ] milk", "milk", MdRange(6, 10)))
+    }
+
+    @Test
+    fun anEditOverlappingTheCompositionDropsIt() {
+        assertNull(compositionThroughEdit("- [ ] milk", "milk", MdRange(2, 6)))
+        assertNull(compositionThroughEdit("- [ ] milk", "- [x] milk", MdRange(2, 5)))
+        assertNull(compositionThroughEdit("abc", "abd", MdRange(1, 3)))
+    }
+
     @Test
     fun lineMarkerAppliesToTheWholeContiguousList() {
         val text = "- one\n- [ ] two\n- three"
-        val edit = applyFormatAction(text, MdRange(0, 0), FormatAction.SetLineMarker(6, LineMarkerKind.None))
+        val edit = applyFormatAction(text, MdRange(6, 6), FormatAction.SetLineMarker(LineMarkerKind.None))
         assertEquals("one\ntwo\nthree", edit.text)
+    }
+
+    @Test
+    fun aSelectionWhereNotEveryLineHasTheMarkerAddsItToAllOfThem() {
+        val edit = applyFormatAction(
+            text = "one\n- two\nthree",
+            selection = MdRange(0, 15),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Task),
+        )
+        assertEquals("- [ ] one\n- [ ] two\n- [ ] three", edit.text)
+    }
+
+    @Test
+    fun aSelectionWhereEveryLineHasTheMarkerRemovesIt() {
+        val edit = applyFormatAction(
+            text = "- [ ] one\n- [ ] two",
+            selection = MdRange(0, 19),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Task),
+        )
+        assertEquals("one\ntwo", edit.text)
+    }
+
+    @Test
+    fun aSelectionEndingAtALineStartLeavesThatLineAlone() {
+        val edit = applyFormatAction(
+            text = "- one\n- two",
+            selection = MdRange(0, 6),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Task),
+        )
+        assertEquals("- [ ] one\n- two", edit.text)
+    }
+
+    @Test
+    fun aSelectionAcrossBlankLinesSkipsThem() {
+        val edit = applyFormatAction(
+            text = "one\n\ntwo",
+            selection = MdRange(0, 8),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Bullet),
+        )
+        assertEquals("- one\n\n- two", edit.text)
+    }
+
+    @Test
+    fun aSelectionNumbersTheSelectedLinesInOrder() {
+        val edit = applyFormatAction(
+            text = "- [ ] a\n- b\nplain",
+            selection = MdRange(0, 17),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Ordered),
+        )
+        assertEquals("1. a\n2. b\n3. plain", edit.text)
+    }
+
+    @Test
+    fun aSelectionWhereEveryLineIsOrderedRemovesTheNumbers() {
+        val edit = applyFormatAction(
+            text = "1. a\n2. b",
+            selection = MdRange(0, 9),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Ordered),
+        )
+        assertEquals("a\nb", edit.text)
+    }
+
+    @Test
+    fun orderedOnACheckboxBlockDropsTheCheckboxesAndNumbersTheLines() {
+        val edit = applyFormatAction(
+            text = "- [ ] a\n- [ ] b",
+            selection = MdRange(0, 0),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Ordered),
+        )
+        assertEquals("1. a\n2. b", edit.text)
+    }
+
+    @Test
+    fun aSelectionApplyingTasksKeepsEachLinesCheckedState() {
+        val edit = applyFormatAction(
+            text = "- [x] done\n- plain",
+            selection = MdRange(0, 18),
+            action = FormatAction.SetLineMarker(LineMarkerKind.Task),
+        )
+        assertEquals("- [x] done\n- [ ] plain", edit.text)
     }
 
     @Test
@@ -448,6 +686,16 @@ class MarkdownFormattingTest {
         assertTrue(InlineFormat.Italic in inlineFormatsCovering(document.styles, italic.range))
         assertTrue(InlineFormat.Bold !in inlineFormatsCovering(document.styles, italic.range))
         assertEquals(2, headingLevelAt(document.styles, italic.range.start))
+    }
+
+    @Test
+    fun theHeadingLevelIsActiveWithTheCaretAtTheEndOfTheLine() {
+        assertEquals(1, headingLevelAt(parser.parse("# ").styles, 2))
+        assertEquals(3, headingLevelAt(parser.parse("### Title").styles, 9))
+        val twoLines = parser.parse("# Title\nbody").styles
+        assertEquals(1, headingLevelAt(twoLines, 7))
+        assertEquals(0, headingLevelAt(twoLines, 8))
+        assertEquals(0, headingLevelAt(twoLines, 12))
     }
 
     @Test

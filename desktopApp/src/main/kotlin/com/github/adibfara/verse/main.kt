@@ -61,6 +61,7 @@ fun main(args: Array<String>) {
             }
 
             LaunchedEffect(window) {
+                window.roundCornersOnWindows()
                 window.dropTarget = DropTarget(
                     window,
                     DnDConstants.ACTION_COPY,

@@ -21,11 +21,13 @@ sealed interface FormatAction {
 
     data class SetHeading(val offset: Int, val level: Int) : FormatAction
 
-    data class SetLineMarker(val offset: Int, val kind: LineMarkerKind) : FormatAction
+    data class SetLineMarker(val kind: LineMarkerKind) : FormatAction
 
     data class ToggleLink(val range: MdRange) : FormatAction
 
     data class ContinueList(val caretOffset: Int) : FormatAction
+
+    data class DeleteTaskMarker(val caretOffset: Int) : FormatAction
 }
 
 fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): TextEdit {
@@ -39,13 +41,17 @@ fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): T
         if (selection.start != selection.end) return TextEdit(text, selection)
         return enterEdit(text, action.caretOffset, selection)
     }
+    if (action is FormatAction.DeleteTaskMarker) {
+        return taskMarkerDeletionEdit(text, action.caretOffset, selection)
+    }
     val splices = when (action) {
         is FormatAction.ToggleInline -> inlineSplices(text, action.range, action.format)
         is FormatAction.SetHeading -> headingSplices(text, action.offset, action.level)
-        is FormatAction.SetLineMarker -> lineMarkerSplices(text, action.offset, action.kind)
+        is FormatAction.SetLineMarker -> lineMarkerSplices(text, selection, action.kind)
         is FormatAction.ToggleLink,
         is FormatAction.ContinueList,
-            -> emptyList()
+        is FormatAction.DeleteTaskMarker,
+        -> emptyList()
     }
     return applySplices(text, splices, selection)
 }
@@ -70,6 +76,59 @@ fun insertedNewlineOffset(before: String, after: String): Int? {
     if (newline < 0) return null
     if (inserted.indexOf('\n', startIndex = newline + 1) >= 0) return null
     return prefix + newline
+}
+
+fun taskMarkerBackspaceEdit(before: String, after: String, selection: MdRange): TextEdit? {
+    if (before == after || selection.start != selection.end) return null
+    val removed = removedRange(before, after) ?: return null
+    val scan = scanLinePrefix(before, lineRangeAt(before, removed.start))
+    if (scan.checkBox == null) return null
+    val boxStart = scan.checkBoxEnd - 3
+    if (removed.start < boxStart || removed.start >= scan.checkBoxEnd) return null
+    if (removed.end > scan.contentStart) return null
+    return applySplices(
+        text = after,
+        splices = listOf(Splice(scan.indentEnd, scan.contentStart - removed.length, "")),
+        selection = selection,
+    )
+}
+
+private fun removedRange(before: String, after: String): MdRange? {
+    val removed = before.length - after.length
+    if (removed <= 0) return null
+    val limit = minOf(before.length, after.length)
+    var prefix = 0
+    while (prefix < limit && before[prefix] == after[prefix]) prefix++
+    var suffix = 0
+    while (suffix < limit - prefix &&
+        before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+    ) {
+        suffix++
+    }
+    val end = before.length - suffix
+    if (end - prefix != removed) return null
+    return MdRange(prefix, end)
+}
+
+
+fun compositionThroughEdit(before: String, after: String, composition: MdRange): MdRange? {
+    if (before == after) return composition
+    val limit = minOf(before.length, after.length)
+    var prefix = 0
+    while (prefix < limit && before[prefix] == after[prefix]) prefix++
+    var suffix = 0
+    while (suffix < limit - prefix &&
+        before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+    ) {
+        suffix++
+    }
+    val change = MdRange(prefix, before.length - suffix)
+    val delta = after.length - before.length
+    return when {
+        composition.end <= change.start -> composition
+        composition.start >= change.end -> MdRange(composition.start + delta, composition.end + delta)
+        else -> null
+    }
 }
 
 fun inlineLinkAt(text: String, offset: Int): MdRange? {
@@ -164,8 +223,9 @@ private fun headingSplices(text: String, offset: Int, level: Int): List<Splice> 
     return listOf(Splice(indentEnd, contentStart, prefix))
 }
 
-private fun lineMarkerSplices(text: String, offset: Int, requested: LineMarkerKind): List<Splice> {
-    val line = lineRangeAt(text, offset)
+private fun lineMarkerSplices(text: String, selection: MdRange, requested: LineMarkerKind): List<Splice> {
+    if (selection.start != selection.end) return selectionSplices(text, selection, requested)
+    val line = lineRangeAt(text, selection.start)
     val current = lineMarkerKindAt(text, line.start)
     val kind = if (requested != LineMarkerKind.None && current == requested) {
         LineMarkerKind.None
@@ -192,7 +252,7 @@ private fun lineMarkerSplices(text: String, offset: Int, requested: LineMarkerKi
         val separator = blockLines
             .map { scanLinePrefix(text, it) }
             .firstOrNull { isOrderedMarker(it.marker) }
-            ?.marker?.last() ?: '.'
+            ?.marker?.lastOrNull() ?: '.'
         return blockLines.mapIndexed { index, currentLine ->
             lineMarkerSplice(text, currentLine, kind, orderedNumber = index + 1, orderedSeparator = separator)
         }
@@ -201,6 +261,41 @@ private fun lineMarkerSplices(text: String, offset: Int, requested: LineMarkerKi
     return blockLines.map { currentLine ->
         lineMarkerSplice(text, currentLine, kind, orderedNumber = null, orderedSeparator = '.')
     }
+}
+
+private fun selectionSplices(text: String, selection: MdRange, requested: LineMarkerKind): List<Splice> {
+    val content = selectedLines(text, selection).filter { !text.substring(it.start, it.end).isBlank() }
+    if (content.isEmpty()) return emptyList()
+    val clear = requested == LineMarkerKind.None ||
+        content.all { lineMarkerKindAt(text, it.start) == requested }
+    val kind = if (clear) LineMarkerKind.None else requested
+    if (kind == LineMarkerKind.Ordered) {
+        val separator = content
+            .map { scanLinePrefix(text, it) }
+            .firstOrNull { isOrderedMarker(it.marker) }
+            ?.marker?.lastOrNull() ?: '.'
+        return content.mapIndexed { index, line ->
+            lineMarkerSplice(text, line, kind, orderedNumber = index + 1, orderedSeparator = separator)
+        }
+    }
+    return content.map { line ->
+        lineMarkerSplice(text, line, kind, orderedNumber = null, orderedSeparator = '.')
+    }
+}
+
+private fun selectedLines(text: String, selection: MdRange): List<MdRange> {
+    val start = selection.start.coerceIn(0, text.length)
+    val end = selection.end.coerceIn(0, text.length)
+    val first = lineRangeAt(text, start)
+    val lastStart = lineRangeAt(text, (end - 1).coerceAtLeast(start)).start
+    val lines = mutableListOf<MdRange>()
+    var cursor = first.start
+    while (cursor <= lastStart) {
+        val line = lineRangeAt(text, cursor)
+        lines.add(line)
+        cursor = line.end + 1
+    }
+    return lines
 }
 
 private fun listBlockRange(text: String, line: MdRange): MdRange {
@@ -239,11 +334,7 @@ private fun lineMarkerSplice(
         LineMarkerKind.Task -> "$bullet [$checkBox] "
         LineMarkerKind.Ordered -> {
             val number = orderedNumber ?: 1
-            if (scan.checkBox != null) {
-                "$number$orderedSeparator [${scan.checkBox}] "
-            } else {
-                "$number$orderedSeparator "
-            }
+            "$number$orderedSeparator "
         }
     }
     return Splice(scan.indentEnd, scan.contentStart, prefix)
@@ -253,6 +344,22 @@ private fun isOrderedMarker(marker: String): Boolean = marker.isNotEmpty() && ma
 
 fun lineMarkerKindAt(text: String, offset: Int): LineMarkerKind =
     kindOf(scanLinePrefix(text, lineRangeAt(text, offset)))
+
+fun caretAfterTaskMarker(text: String, offset: Int): Boolean {
+    val caret = offset.coerceIn(0, text.length)
+    val scan = scanLinePrefix(text, lineRangeAt(text, caret))
+    return scan.checkBox != null && caret in scan.checkBoxEnd..scan.contentStart
+}
+
+private fun taskMarkerDeletionEdit(text: String, caretOffset: Int, selection: MdRange): TextEdit {
+    if (!caretAfterTaskMarker(text, caretOffset)) return TextEdit(text, selection)
+    val scan = scanLinePrefix(text, lineRangeAt(text, caretOffset.coerceIn(0, text.length)))
+    return applySplices(
+        text = text,
+        splices = listOf(Splice(scan.indentEnd, scan.contentStart, "")),
+        selection = selection,
+    )
+}
 
 private fun kindOf(scan: LinePrefixScan): LineMarkerKind = when {
     scan.checkBox != null -> LineMarkerKind.Task
@@ -279,7 +386,7 @@ private fun continuationEdit(text: String, newlineOffset: Int, selection: MdRang
     if (kind == LineMarkerKind.None) return TextEdit(text, selection)
 
     val isEmptyItem = text.substring(scan.contentStart, previousLine.end).isBlank() &&
-            scan.prefix == scan.canonicalPrefix
+        scan.prefix == scan.canonicalPrefix
     if (isEmptyItem) {
         return applySplices(
             text = text,
@@ -304,7 +411,6 @@ private fun nextMarker(scan: LinePrefixScan, kind: LineMarkerKind): String = whe
         val separator = scan.marker.lastOrNull { !it.isDigit() } ?: '.'
         "$number$separator "
     }
-
     LineMarkerKind.None -> ""
 }
 
@@ -335,7 +441,7 @@ fun inlineFormatsCovering(styles: List<StyledRange>, range: MdRange): Set<Inline
 fun headingLevelAt(styles: List<StyledRange>, offset: Int): Int {
     var level = 0
     styles.forEach { styled ->
-        if (styled.kind.isHeading && styled.range.contains(offset)) {
+        if (styled.kind.isHeading && offset in styled.range.start..styled.range.end) {
             level = styled.kind.headingLevel
         }
     }
@@ -383,6 +489,7 @@ private class LinePrefixScan(
     val contentStart: Int,
     val marker: String,
     val checkBox: Char?,
+    val checkBoxEnd: Int,
     val prefix: String,
     val canonicalPrefix: String,
 )
@@ -403,18 +510,20 @@ private fun scanLinePrefix(text: String, line: MdRange): LinePrefixScan {
         }
     }
     if (marker.isEmpty()) {
-        return LinePrefixScan(indentEnd, indentEnd, "", null, "", "")
+        return LinePrefixScan(indentEnd, indentEnd, "", null, -1, "", "")
     }
     while (index < line.end && text[index] == ' ') index++
 
     var checkBox: Char? = null
     var rawCheckBox = ""
+    var checkBoxEnd = -1
     if (index + 3 <= line.end && text[index] == '[' && text[index + 2] == ']') {
         val inner = text[index + 1]
         if (inner == ' ' || inner == 'x' || inner == 'X') {
             checkBox = if (inner == ' ') ' ' else 'x'
             rawCheckBox = text.substring(index, index + 3)
             index += 3
+            checkBoxEnd = index
             while (index < line.end && text[index] == ' ') index++
         }
     }
@@ -424,6 +533,7 @@ private fun scanLinePrefix(text: String, line: MdRange): LinePrefixScan {
         contentStart = index,
         marker = marker,
         checkBox = checkBox,
+        checkBoxEnd = checkBoxEnd,
         prefix = text.substring(indentEnd, index),
         canonicalPrefix = canonicalPrefix,
     )
