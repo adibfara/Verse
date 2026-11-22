@@ -42,6 +42,8 @@ import com.github.adibfara.verse.core.designsystem.theme.mobileSpacing
 import com.github.adibfara.verse.core.designsystem.theme.resolveTheme
 import com.github.adibfara.verse.core.model.FileNode
 import com.github.adibfara.verse.core.model.FilePath
+import com.github.adibfara.verse.core.persistence.EditorFontSizeStep
+import com.github.adibfara.verse.core.persistence.withAdjustedEditorFontSize
 import com.github.adibfara.verse.core.platform.LocationResolver
 import com.github.adibfara.verse.core.platform.PlatformFolderPickerOverlay
 import com.github.adibfara.verse.core.platform.PlatformKind
@@ -182,6 +184,10 @@ private fun WorkspaceScreen(
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
+    LaunchedEffect(registry, appState.settings.keyBindingOverrides) {
+        registry.setOverrides(appState.settings.commandBindingOverrides)
+    }
+
     val absolutePathOf: (FilePath) -> String = { path ->
         spaceRepository.current.value?.fileSystem?.absolutePathOf(path).orEmpty()
     }
@@ -256,6 +262,13 @@ private fun WorkspaceScreen(
             Commands.ToggleTheme.id -> workspaceViewModel.toggleTheme()
             Commands.ToggleFormattingToolbar.id -> workspaceViewModel.updateSettings {
                 it.copy(showFormattingToolbar = !it.showFormattingToolbar)
+            }
+            Commands.IncreaseFontSize.id -> workspaceViewModel.updateSettings {
+                it.withAdjustedEditorFontSize(EditorFontSizeStep)
+            }
+
+            Commands.DecreaseFontSize.id -> workspaceViewModel.updateSettings {
+                it.withAdjustedEditorFontSize(-EditorFontSizeStep)
             }
             Commands.OpenSettings.id -> settingsVisible = true
             Commands.CloseSpace.id -> workspaceViewModel.closeSpace()
@@ -337,6 +350,10 @@ private fun WorkspaceScreen(
                 onEditorRequestMove = onEditorRequestMove,
                 onEditorRequestDelete = onEditorRequestDelete,
                 modifier = shellModifier,
+                fontSize = appState.settings.editorFontSize,
+                onAdjustFontSize = { delta ->
+                    workspaceViewModel.updateSettings { it.withAdjustedEditorFontSize(delta) }
+                },
             )
         } else {
             MobileShell(
@@ -367,6 +384,10 @@ private fun WorkspaceScreen(
                 onOpenSpace = workspaceViewModel::openRecent,
                 onAddSpace = workspaceViewModel::chooseFolder,
                 modifier = shellModifier,
+                fontSize = appState.settings.editorFontSize,
+                onAdjustFontSize = { delta ->
+                    workspaceViewModel.updateSettings { it.withAdjustedEditorFontSize(delta) }
+                },
             )
         }
 

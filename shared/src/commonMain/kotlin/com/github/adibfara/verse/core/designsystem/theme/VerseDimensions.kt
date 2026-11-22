@@ -52,6 +52,7 @@ data class VerseSizes(
     val floatingBarHeight: Dp = 44.dp,
     val floatingBarInset: Dp = 10.dp,
     val badgeMinWidth: Dp = 24.dp,
+    val stepperValueWidth: Dp = 40.dp,
     val dialogMinWidth: Dp = 380.dp,
     val dialogMaxWidth: Dp = 560.dp,
     val searchPanelWidth: Dp = 720.dp,

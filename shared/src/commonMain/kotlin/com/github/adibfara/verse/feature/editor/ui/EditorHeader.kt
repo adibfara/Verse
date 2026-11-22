@@ -60,6 +60,8 @@ fun EditorHeader(
     centerBreadcrumb: Boolean = false,
     compactActions: Boolean = false,
     onOpenSettings: (() -> Unit)? = null,
+    fontSize: Float? = null,
+    onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -96,6 +98,8 @@ fun EditorHeader(
                 onOpenSettings = onOpenSettings,
                 onVoiceInput = onVoiceInput,
                 onOverflowAction = onOverflowAction,
+                fontSize = fontSize,
+                onAdjustFontSize = onAdjustFontSize,
             )
         } else {
             onVoiceInput?.let {
@@ -151,7 +155,11 @@ fun EditorHeader(
                     onClick = it,
                 )
             }
-            EditorOverflowButton(onAction = onOverflowAction)
+            EditorOverflowButton(
+                onAction = onOverflowAction,
+                fontSize = fontSize,
+                onAdjustFontSize = onAdjustFontSize,
+            )
         }
     }
 }
@@ -167,6 +175,8 @@ private fun CompactHeaderActions(
     onOpenSettings: (() -> Unit)?,
     onVoiceInput: (() -> Unit)?,
     onOverflowAction: (EditorOverflowAction) -> Unit,
+    fontSize: Float?,
+    onAdjustFontSize: ((Float) -> Unit)?,
 ) {
     val isRaw = mode == EditorMode.Raw
     val extraEntries = buildList {
@@ -211,6 +221,8 @@ private fun CompactHeaderActions(
             onAction = onOverflowAction,
             leadingEntries = extraEntries,
             alignment = Alignment.TopEnd,
+            fontSize = fontSize,
+            onAdjustFontSize = onAdjustFontSize,
         )
     }
 }
@@ -251,8 +263,11 @@ fun EditorTitleBar(
     onRename: (String) -> Unit,
     horizontalPadding: Dp,
     modifier: Modifier = Modifier,
+    onStartNoteBody: (() -> Unit)? = null,
+    focusRequestId: Int? = null,
 ) {
     val colors = VerseTheme.colors
+    val titleFocusRequester = remember { FocusRequester() }
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -270,6 +285,9 @@ fun EditorTitleBar(
             EditableTitle(
                 title = title,
                 onRename = onRename,
+                onStartNoteBody = onStartNoteBody,
+                focusRequester = titleFocusRequester,
+                focusRequestId = focusRequestId,
                 style = VerseTheme.typography.noteTitle,
                 modifier = Modifier.weight(1f),
             )
@@ -289,18 +307,31 @@ private fun EditableTitle(
     title: String,
     onRename: (String) -> Unit,
     style: TextStyle,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
+    onStartNoteBody: (() -> Unit)? = null,
+    focusRequestId: Int? = null,
 ) {
     val colors = VerseTheme.colors
     val focusManager = LocalFocusManager.current
     var value by remember(title) { mutableStateOf(TextFieldValue(title)) }
     var focused by remember { mutableStateOf(false) }
+    val startBody: () -> Unit = {
+        val start = onStartNoteBody
+        if (start != null) start() else focusManager.clearFocus()
+    }
+
+    LaunchedEffect(focusRequestId) {
+        if (focusRequestId == null) return@LaunchedEffect
+        value = value.copy(selection = TextRange(value.text.length))
+        focusRequester.requestFocus()
+    }
 
     BasicTextField(
         value = value,
         onValueChange = { updated ->
             if (updated.text.contains('\n')) {
-                focusManager.clearFocus()
+                startBody()
             } else {
                 value = updated
             }
@@ -308,11 +339,12 @@ private fun EditableTitle(
         singleLine = false,
         textStyle = style.copy(color = colors.textPrimary),
         cursorBrush = SolidColor(colors.caret),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { startBody() }, onDone = { startBody() }),
         modifier = modifier
             .widthIn(min = VerseTheme.sizes.badgeMinWidth)
             .padding(vertical = VerseTheme.spacing.sm)
+            .focusRequester(focusRequester)
             .onFocusChanged { state ->
                 if (focused && !state.isFocused) {
                     val trimmed = value.text.trim()

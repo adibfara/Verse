@@ -10,11 +10,13 @@ import com.github.adibfara.verse.core.markdown.FormatAction
 import com.github.adibfara.verse.core.markdown.MarkdownParser
 import com.github.adibfara.verse.core.markdown.MdDocument
 import com.github.adibfara.verse.core.markdown.MdRange
+import com.github.adibfara.verse.core.markdown.TextEdit
 import com.github.adibfara.verse.core.markdown.anchorOffsetIn
 import com.github.adibfara.verse.core.markdown.applyFormatAction
 import com.github.adibfara.verse.core.markdown.computeStats
+import com.github.adibfara.verse.core.markdown.continueListAfterNewline
 import com.github.adibfara.verse.core.markdown.documentWithTaskToggled
-import com.github.adibfara.verse.core.markdown.hasListContinuation
+import com.github.adibfara.verse.core.markdown.insertedNewlineOffset
 import com.github.adibfara.verse.core.model.EditorMode
 import com.github.adibfara.verse.core.model.FileKind
 import com.github.adibfara.verse.core.model.FilePath
@@ -71,6 +73,7 @@ class EditorViewModel(
     private var activePath: FilePath? = null
     private var pendingFocusPath: FilePath? = null
     private var focusRequestCounter = 0
+    private var titleFocusCounter = 0
 
     private val mutableState = MutableStateFlow(EditorUiState())
     val state: StateFlow<EditorUiState> = mutableState.asStateFlow()
@@ -111,7 +114,33 @@ class EditorViewModel(
             EditorEvent.ToggleFavorite -> toggleFavorite()
             EditorEvent.ToggleLock -> toggleLock()
             is EditorEvent.RequestRename -> renameActiveFile(event.name)
+            EditorEvent.StartNoteBody -> startNoteBody()
+            EditorEvent.JumpToTitle -> jumpToTitle()
         }
+    }
+
+    private fun jumpToTitle() {
+        val session = activeSession() ?: return
+        if (!session.isLocked) {
+            val text = session.value.text
+            if (text.startsWith('\n')) {
+                val updated = text.substring(1)
+                if (session.kind == FileKind.Markdown) session.document = parser.parse(updated)
+                textChanged(TextFieldValue(updated, TextRange(0)), reparse = false)
+            }
+        }
+        titleFocusCounter++
+        mutableState.value = mutableState.value.copy(focusTitleRequestId = titleFocusCounter)
+    }
+
+    private fun startNoteBody() {
+        val session = activeSession() ?: return
+        if (!session.kind.isEditable || session.isLocked) return
+        val text = session.value.text
+        val updated = if (text.isEmpty() || text.startsWith('\n')) text else "\n$text"
+        if (updated == text && session.value.selection == TextRange(0)) return
+        if (session.kind == FileKind.Markdown) session.document = parser.parse(updated)
+        textChanged(TextFieldValue(updated, TextRange(0)), reparse = false)
     }
 
     private fun renameActiveFile(newName: String) {
@@ -377,6 +406,16 @@ class EditorViewModel(
         action: FormatAction,
     ): Boolean {
         val edit = applyFormatAction(text = text, selection = selection, action = action)
+        return publishEdit(session, text, selection, edit, reversed)
+    }
+
+    private fun publishEdit(
+        session: EditorSession,
+        text: String,
+        selection: MdRange,
+        edit: TextEdit,
+        reversed: Boolean = false,
+    ): Boolean {
         if (edit.text == text && edit.selection == selection) return false
         session.document = parser.parse(edit.text)
         textChanged(
@@ -395,24 +434,11 @@ class EditorViewModel(
 
     private fun continuedList(session: EditorSession, value: TextFieldValue): Boolean {
         if (session.kind != FileKind.Markdown) return false
-        val caret = insertedNewlineOffset(session.value, value) ?: return false
-        if (!hasListContinuation(session.value.text, caret)) return false
-        return applyFormatTo(
-            session = session,
-            text = session.value.text,
-            selection = MdRange(caret, caret),
-            reversed = false,
-            action = FormatAction.ContinueList,
-        )
-    }
-
-    private fun insertedNewlineOffset(before: TextFieldValue, after: TextFieldValue): Int? {
-        if (after.text.length != before.text.length + 1) return null
-        if (!after.selection.collapsed) return null
-        val offset = after.selection.start - 1
-        if (offset < 0 || offset > before.text.length) return null
-        if (after.text[offset] != '\n') return null
-        return offset
+        if (!value.selection.collapsed) return false
+        val newline = insertedNewlineOffset(session.value.text, value.text) ?: return false
+        val selection = MdRange(value.selection.start, value.selection.end)
+        val edit = continueListAfterNewline(text = value.text, newlineOffset = newline, selection = selection)
+        return publishEdit(session, value.text, selection, edit)
     }
 
     private fun renamed(from: FilePath, to: FilePath) {

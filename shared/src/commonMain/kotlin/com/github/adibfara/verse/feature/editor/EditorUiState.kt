@@ -22,6 +22,7 @@ data class EditorUiState(
     val isLocked: Boolean = false,
     val errorMessage: String? = null,
     val focusContentRequestId: Int? = null,
+    val focusTitleRequestId: Int? = null,
 ) {
     val hasFile: Boolean get() = path != null
 }
@@ -45,6 +46,8 @@ sealed interface EditorEvent {
     data object ToggleFavorite : EditorEvent
     data object ToggleLock : EditorEvent
     data class RequestRename(val name: String) : EditorEvent
+    data object StartNoteBody : EditorEvent
+    data object JumpToTitle : EditorEvent
 }
 
 sealed interface EditorAction {

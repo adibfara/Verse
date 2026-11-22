@@ -38,6 +38,15 @@ sealed interface MenuEntry {
         val onClick: () -> Unit,
     ) : MenuEntry
 
+    data class Stepper(
+        val label: String,
+        val value: String,
+        val onDecrease: () -> Unit,
+        val onIncrease: () -> Unit,
+        val decreaseEnabled: Boolean = true,
+        val increaseEnabled: Boolean = true,
+    ) : MenuEntry
+
     data object Separator : MenuEntry
 }
 
@@ -66,9 +75,41 @@ fun VerseContextMenu(
                 when (entry) {
                     is MenuEntry.Separator -> MenuSeparator()
                     is MenuEntry.Action -> MenuActionRow(entry = entry, onDismiss = onDismiss)
+                    is MenuEntry.Stepper -> MenuStepperRow(entry = entry)
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun MenuStepperRow(entry: MenuEntry.Stepper) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VerseTheme.spacing.xs)
+            .padding(
+                start = VerseTheme.spacing.sm,
+                end = VerseTheme.spacing.xs,
+                top = VerseTheme.spacing.xxs,
+                bottom = VerseTheme.spacing.xxs,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        VerseText(
+            text = entry.label,
+            modifier = Modifier.weight(1f),
+            style = VerseTheme.typography.uiBody,
+            color = VerseTheme.colors.textPrimary,
+            maxLines = 1,
+        )
+        VerseStepper(
+            value = entry.value,
+            onDecrease = entry.onDecrease,
+            onIncrease = entry.onIncrease,
+            decreaseEnabled = entry.decreaseEnabled,
+            increaseEnabled = entry.increaseEnabled,
+        )
     }
 }
 

@@ -84,6 +84,8 @@ fun MobileShell(
     onOpenSpace: (RecentSpace) -> Unit = {},
     onAddSpace: () -> Unit = {},
     modifier: Modifier = Modifier,
+    fontSize: Float? = null,
+    onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     var screen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
     var previousScreen: MobileScreen by remember { mutableStateOf(MobileScreen.Note) }
@@ -182,6 +184,8 @@ fun MobileShell(
                                     showFormatPopup = false,
                                     onOpenSettings = onOpenSettings,
                                     modifier = Modifier.weight(1f),
+                                    fontSize = fontSize,
+                                    onAdjustFontSize = onAdjustFontSize,
                                 )
                             }
 

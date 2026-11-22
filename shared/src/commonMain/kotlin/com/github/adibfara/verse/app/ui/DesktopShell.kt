@@ -66,6 +66,8 @@ fun DesktopShell(
     onEditorRequestMove: () -> Unit,
     onEditorRequestDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    fontSize: Float? = null,
+    onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     val colors = VerseTheme.colors
     val windowShapeModifier = if (windowChrome != null) {
@@ -123,6 +125,8 @@ fun DesktopShell(
                     onRequestMove = onEditorRequestMove,
                     onRequestDelete = onEditorRequestDelete,
                     modifier = Modifier.weight(1f).fillMaxHeight(),
+                    fontSize = fontSize,
+                    onAdjustFontSize = onAdjustFontSize,
                 )
             }
         }

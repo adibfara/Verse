@@ -13,6 +13,10 @@ import com.github.adibfara.verse.core.designsystem.component.VerseContextMenu
 import com.github.adibfara.verse.core.designsystem.component.VerseIconButton
 import com.github.adibfara.verse.core.designsystem.component.VerseIcons
 import com.github.adibfara.verse.core.designsystem.component.MenuEntry
+import com.github.adibfara.verse.core.persistence.EditorFontSizeStep
+import com.github.adibfara.verse.core.persistence.MaxEditorFontSize
+import com.github.adibfara.verse.core.persistence.MinEditorFontSize
+import com.github.adibfara.verse.core.persistence.formatEditorFontSize
 
 sealed interface EditorOverflowAction {
     data object Find : EditorOverflowAction
@@ -30,6 +34,8 @@ fun EditorOverflowButton(
     modifier: Modifier = Modifier,
     leadingEntries: List<MenuEntry> = emptyList(),
     alignment: Alignment = Alignment.TopStart,
+    fontSize: Float? = null,
+    onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
@@ -83,10 +89,25 @@ fun EditorOverflowButton(
                     onClick = { act(EditorOverflowAction.Delete) },
                 ),
             )
-            val entries = if (leadingEntries.isEmpty()) {
-                trailingEntries
-            } else {
-                leadingEntries + MenuEntry.Separator + trailingEntries
+            val entries = buildList {
+                if (fontSize != null && onAdjustFontSize != null) {
+                    add(
+                        MenuEntry.Stepper(
+                            label = "Font size",
+                            value = formatEditorFontSize(fontSize),
+                            onDecrease = { onAdjustFontSize(-EditorFontSizeStep) },
+                            onIncrease = { onAdjustFontSize(EditorFontSizeStep) },
+                            decreaseEnabled = fontSize > MinEditorFontSize,
+                            increaseEnabled = fontSize < MaxEditorFontSize,
+                        ),
+                    )
+                    add(MenuEntry.Separator)
+                }
+                if (leadingEntries.isNotEmpty()) {
+                    addAll(leadingEntries)
+                    add(MenuEntry.Separator)
+                }
+                addAll(trailingEntries)
             }
             VerseContextMenu(
                 entries = entries,

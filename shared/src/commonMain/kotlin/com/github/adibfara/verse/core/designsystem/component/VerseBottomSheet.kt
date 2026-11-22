@@ -61,6 +61,7 @@ fun VerseMenuSheetList(
         when (entry) {
             is MenuEntry.Separator -> MenuSeparator()
             is MenuEntry.Action -> MenuActionRow(entry = entry, onDismiss = onEntryClicked)
+            is MenuEntry.Stepper -> MenuStepperRow(entry = entry)
         }
     }
 }

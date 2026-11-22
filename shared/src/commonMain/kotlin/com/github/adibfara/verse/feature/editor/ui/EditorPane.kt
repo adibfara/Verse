@@ -81,6 +81,8 @@ fun EditorPane(
     compactHeader: Boolean = false,
     showFormatPopup: Boolean = true,
     onOpenSettings: (() -> Unit)? = null,
+    fontSize: Float? = null,
+    onAdjustFontSize: ((Float) -> Unit)? = null,
 ) {
     val colors = VerseTheme.colors
     var findState by remember(state.path) { mutableStateOf<FindReplaceUiState?>(null) }
@@ -179,6 +181,8 @@ fun EditorPane(
                 },
                 compactActions = compactHeader,
                 onOpenSettings = onOpenSettings,
+                fontSize = fontSize,
+                onAdjustFontSize = onAdjustFontSize,
             )
             if (!compactHeader) VerseDivider()
         }
@@ -198,7 +202,7 @@ fun EditorPane(
         }
 
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            if (state.hasFile) {
+            if (state.hasFile && !state.kind.isEditable) {
                 EditorTitleBar(
                     title = state.breadcrumb.lastOrNull().orEmpty(),
                     isDirty = state.isDirty,
@@ -293,6 +297,11 @@ private fun EditorContent(
     val openLink: (String) -> Unit = { target ->
         if (isAnchorTarget(target)) onEvent(EditorEvent.JumpToAnchor(target)) else onOpenLink(target)
     }
+    val startNoteBody: () -> Unit = {
+        onEvent(EditorEvent.StartNoteBody)
+        focusRequester.requestFocus()
+    }
+    val jumpToTitle: () -> Unit = { onEvent(EditorEvent.JumpToTitle) }
 
     LaunchedEffect(state.path, state.focusContentRequestId) {
         if (state.focusContentRequestId != null) focusRequester.requestFocus()
@@ -322,6 +331,15 @@ private fun EditorContent(
                 onEvent(EditorEvent.ToggleTask(range, checked))
             }
             val onFormat: (FormatAction) -> Unit = { onEvent(EditorEvent.ApplyFormat(it)) }
+            val continueLists = state.kind == FileKind.Markdown && !readOnly
+            EditorTitleBar(
+                title = state.breadcrumb.lastOrNull().orEmpty(),
+                isDirty = state.isDirty,
+                onRename = { onEvent(EditorEvent.RequestRename(it)) },
+                horizontalPadding = VerseTheme.spacing.none,
+                onStartNoteBody = if (readOnly) null else startNoteBody,
+                focusRequestId = state.focusTitleRequestId,
+            )
             when (state.mode) {
                 EditorMode.Preview -> RenderedMarkdownField(
                     value = state.value,
@@ -330,9 +348,11 @@ private fun EditorContent(
                     onToggleTask = onToggleTask,
                     onOpenLink = openLink,
                     onFormat = onFormat,
+                    onBackspaceAtStart = if (readOnly) null else jumpToTitle,
                     focusRequester = focusRequester,
                     showFormatPopup = showFormatPopup && !readOnly,
                     readOnly = readOnly,
+                    continueLists = continueLists,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -343,17 +363,22 @@ private fun EditorContent(
                     onToggleTask = onToggleTask,
                     onOpenLink = openLink,
                     onFormat = onFormat,
+                    onBackspaceAtStart = if (readOnly) null else jumpToTitle,
                     focusRequester = focusRequester,
                     showFormatPopup = showFormatPopup && !readOnly,
                     readOnly = readOnly,
+                    continueLists = continueLists,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
                 EditorMode.Raw -> RawMarkdownField(
                     value = state.value,
                     onValueChange = onValueChange,
+                    onFormat = onFormat,
+                    onBackspaceAtStart = if (readOnly) null else jumpToTitle,
                     focusRequester = focusRequester,
                     readOnly = readOnly,
+                    continueLists = continueLists,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -392,16 +417,16 @@ private fun PersistentFormatToolbar(
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
-    val popupState = rememberInlineToolbarState(state)
     Row(
         modifier = modifier
             .background(colors.surfaceRaised, VerseTheme.shapes.medium)
             .border(VerseTheme.sizes.borderWidth, colors.border, VerseTheme.shapes.medium)
+            .horizontalScroll(rememberScrollState())
             .padding(VerseTheme.spacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VerseTheme.spacing.xxs),
     ) {
-        InlineFormatButtons(state = popupState, onAction = onFormat)
+        FormatToolbarButtons(state = state, onFormat = onFormat)
     }
 }
 
@@ -412,10 +437,6 @@ private fun MobileFormatToolbar(
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
-    val popupState = rememberInlineToolbarState(state)
-    val text = state.value.text
-    val caretOffset = state.value.selection.start.coerceIn(0, text.length)
-    val currentLineMarker = remember(text, caretOffset) { lineMarkerKindAt(text, caretOffset) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -425,24 +446,36 @@ private fun MobileFormatToolbar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VerseTheme.spacing.xxs),
     ) {
-        VerseIconButton(
-            icon = VerseIcons.Check,
-            contentDescription = "Checklist",
-            selected = currentLineMarker == LineMarkerKind.Task,
-            onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Task)) },
-        )
-        VerseIconButton(
-            icon = VerseIcons.Layers,
-            contentDescription = "Bulleted list",
-            selected = currentLineMarker == LineMarkerKind.Bullet,
-            onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Bullet)) },
-        )
-        VerseIconButton(
-            icon = VerseIcons.ListOrdered,
-            contentDescription = "Numbered list",
-            selected = currentLineMarker == LineMarkerKind.Ordered,
-            onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Ordered)) },
-        )
-        InlineFormatButtons(state = popupState, onAction = onFormat)
+        FormatToolbarButtons(state = state, onFormat = onFormat)
     }
+}
+
+@Composable
+private fun FormatToolbarButtons(
+    state: EditorUiState,
+    onFormat: (FormatAction) -> Unit,
+) {
+    val popupState = rememberInlineToolbarState(state)
+    val text = state.value.text
+    val caretOffset = state.value.selection.start.coerceIn(0, text.length)
+    val currentLineMarker = remember(text, caretOffset) { lineMarkerKindAt(text, caretOffset) }
+    VerseIconButton(
+        icon = VerseIcons.Check,
+        contentDescription = "Checklist",
+        selected = currentLineMarker == LineMarkerKind.Task,
+        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Task)) },
+    )
+    VerseIconButton(
+        icon = VerseIcons.Layers,
+        contentDescription = "Bulleted list",
+        selected = currentLineMarker == LineMarkerKind.Bullet,
+        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Bullet)) },
+    )
+    VerseIconButton(
+        icon = VerseIcons.ListOrdered,
+        contentDescription = "Numbered list",
+        selected = currentLineMarker == LineMarkerKind.Ordered,
+        onClick = { onFormat(FormatAction.SetLineMarker(caretOffset, LineMarkerKind.Ordered)) },
+    )
+    InlineFormatButtons(state = popupState, onAction = onFormat)
 }

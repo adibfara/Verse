@@ -127,6 +127,12 @@ object VerseIcons {
         segment(5f, 12f, 19f, 12f)
     } }
 
+    val Minus: ImageVector by lazy {
+        strokeIcon("Minus") {
+            segment(5f, 12f, 19f, 12f)
+        }
+    }
+
     val Check: ImageVector by lazy { strokeIcon("Check") {
         moveTo(20f, 6f)
         lineTo(9f, 17f)

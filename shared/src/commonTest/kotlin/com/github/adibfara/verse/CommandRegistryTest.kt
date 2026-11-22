@@ -78,5 +78,66 @@ class CommandRegistryTest {
         assertEquals("Ctrl+N", Commands.NewNote.binding?.label)
         assertEquals("Ctrl+Shift+N", Commands.NewFolder.binding?.label)
         assertEquals("Ctrl+,", Commands.OpenSettings.binding?.label)
+        assertEquals("Ctrl+=", Commands.IncreaseFontSize.binding?.label)
+        assertEquals("Ctrl+-", Commands.DecreaseFontSize.binding?.label)
+    }
+
+    @Test
+    fun aliasBindingsResolveToTheirCommand() {
+        assertEquals(
+            Commands.IncreaseFontSize.id,
+            registry.resolve(KeyBinding(ShortcutKey.Equals, control = true, shift = true)),
+        )
+        assertEquals(
+            Commands.IncreaseFontSize.id,
+            registry.resolve(KeyBinding(ShortcutKey.Plus, control = true)),
+        )
+    }
+
+    @Test
+    fun setOverridesUpdatesResolvedBindings() {
+        val custom = KeyBinding(ShortcutKey.K, control = true)
+        registry.setOverrides(mapOf(Commands.NewNote.id to custom))
+        assertEquals(Commands.NewNote.id, registry.resolve(custom))
+        assertNull(registry.resolve(KeyBinding(ShortcutKey.N, control = true)))
+    }
+
+    @Test
+    fun nullOverrideUnbindsACommand() {
+        registry.setOverrides(mapOf(Commands.NewNote.id to null))
+        assertNull(registry.resolve(KeyBinding(ShortcutKey.N, control = true)))
+        assertNull(registry.bindingFor(Commands.NewNote.id))
+    }
+
+    @Test
+    fun overridesDropDefaultAliases() {
+        val custom = KeyBinding(ShortcutKey.K, control = true)
+        registry.setOverrides(mapOf(Commands.IncreaseFontSize.id to custom))
+        assertNull(registry.resolve(KeyBinding(ShortcutKey.Equals, control = true)))
+        assertNull(registry.resolve(KeyBinding(ShortcutKey.Plus, control = true)))
+        assertEquals(Commands.IncreaseFontSize.id, registry.resolve(custom))
+    }
+
+    @Test
+    fun overrideClaimsBindingFromAnotherCommandsPrimary() {
+        registry.setOverrides(mapOf(Commands.NewNote.id to KeyBinding(ShortcutKey.S, control = true)))
+        assertEquals(
+            Commands.NewNote.id,
+            registry.resolve(KeyBinding(ShortcutKey.S, control = true)),
+        )
+        assertNull(registry.bindingFor(Commands.Save.id))
+        assertEquals(emptyList(), registry.conflictingBindings())
+    }
+
+    @Test
+    fun overrideClaimsBindingFromAnotherCommandsAliasWithoutUnbindingIt() {
+        val plus = KeyBinding(ShortcutKey.Plus, control = true)
+        registry.setOverrides(mapOf(Commands.NewNote.id to plus))
+        assertEquals(Commands.NewNote.id, registry.resolve(plus))
+        assertEquals(
+            Commands.IncreaseFontSize.id,
+            registry.resolve(KeyBinding(ShortcutKey.Equals, control = true)),
+        )
+        assertEquals(emptyList(), registry.conflictingBindings())
     }
 }

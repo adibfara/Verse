@@ -36,7 +36,7 @@ data class VerseTypography(
     }
 }
 
-fun VerseTypography(editorFontSize: Float = 15.5f, uiScale: Float = 1f): VerseTypography {
+fun VerseTypography(editorFontSize: Float = 16.5f, uiScale: Float = 1f): VerseTypography {
     val body = editorFontSize.sp
     return VerseTypography(
         uiTitle = TextStyle(
@@ -78,7 +78,7 @@ fun VerseTypography(editorFontSize: Float = 15.5f, uiScale: Float = 1f): VerseTy
         editorBody = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontSize = body,
-            lineHeight = 1.65.em,
+            lineHeight = 1.9.em,
         ),
         editorHeading1 = TextStyle(
             fontFamily = FontFamily.SansSerif,
@@ -124,7 +124,7 @@ fun VerseTypography(editorFontSize: Float = 15.5f, uiScale: Float = 1f): VerseTy
         editorRaw = TextStyle(
             fontFamily = FontFamily.Monospace,
             fontSize = body * 0.95f,
-            lineHeight = 1.6.em,
+            lineHeight = 1.8.em,
         ),
     )
 }

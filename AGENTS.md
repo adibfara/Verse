@@ -116,6 +116,14 @@ Editor modes (all three are editable):
 - `Live` — same, except markers on the caret's current line are revealed (Obsidian behaviour), so the transformation is a pure function of `(document, caretLine)` and is cached on that key.
 - `Raw` — plain monospace, no styling at all, by explicit user requirement.
 
+Typography lives in `core/designsystem/theme/VerseTypography.kt` and every editor style is derived from the one
+`editorFontSize` setting (default 16.5, `Ctrl`+`=` / `Ctrl`+`-`, and the font-size stepper at the top of the editor
+overflow menu). Because the editor is a single text field it has exactly **one** line height (`editorBody`), used for
+every line: a `SpanStyle` cannot carry a line height, and giving a heading line a `ParagraphStyle` splits the text into
+paragraphs, which inserts blank lines. So the `lineHeight` fields on `editorHeading1..6` are not used by the editor, and
+a big heading simply overflows its shared line box — spacing around headings comes from the line height and nothing
+else.
+
 Parsing is debounced 80 ms, so the document usually lags the text field by a keystroke or two. `MarkdownVisualTransformation` therefore projects the stale document forward through `textRevisionBetween(before, after)` (`TextRevision.kt`): marker edits `shift` (dropped when the edit touches them) and styles `stretch` (grown when the edit lands inside). Without this the whole document's markers flash back on every keystroke. Do not replace it with an identity fallback.
 
 Checkboxes are **drawn, not typed**. `[ ]` and `[x]` are both replaced by the same blank em-space placeholder, and `drawTaskBoxes` paints a rounded box into that glyph's bounding box (centred on the line's baseline, not the line box, or it rides high). Do not go back to `☐`/`☑` glyphs: their advance widths differ, so toggling reflowed the row, and Windows re-resolved the font fallback for the whole run, which visibly changed *other* lines' checkmarks. One placeholder for both states is what makes a toggle cost zero layout — `openAndDoneTasksReserveIdenticalWidth` pins it.
@@ -137,6 +145,28 @@ A format action **parses synchronously** before publishing (`applyFormat` in `Ed
 Its edits go through `core/markdown/MarkdownFormatting.kt` — pure `String` → `TextEdit` functions behind one `FormatAction`, so there is no Compose in the formatting logic and it is all unit-testable (`MarkdownFormattingTest`). Every action describes itself as a list of non-overlapping `Splice`s rather than returning a finished string, so one `mapOffset` maps the **caret the user already had** through the edit. Formatting must never impose a selection or move the caret off its character: a collapsed caret stays collapsed, an existing selection keeps covering the same words. Insertions use selection affinity — the selection start is pushed right and its end held left — which is what keeps a wrap from swallowing its own closing marker; a caret inside a prefix that gets deleted lands at the content start. Inline toggles match delimiter **run length** at the boundary rather than a prefix, which is why toggling italic on `**x**` nests to `***x***` instead of eating one of bold's stars. Line markers (`SetLineMarker`) rewrite only the line's prefix, preserving indentation, an ordered marker, and the checked state, so checkbox/bullet/none round-trips without touching content.
 
 Up/Down arrows are also handled there (`verticalCaretKeys`) instead of by Compose. The built-in vertical movement was reported stuck on heading lines — pressing Down did nothing — which is the shape of trouble you get driving it through a lossy `OffsetMapping` and mixed font sizes. Rather than depend on its internals, ours maps the caret into transformed space, picks the neighbouring line off the layout, and maps the hit offset back, keeping a goal column so repeated presses do not drift when crossing a large heading. Shift/Ctrl/Alt arrows still fall through to the default.
+
+Enter continues a list, and it has **two** entry points because a Return key is not one thing. A hardware Return arrives
+as a key event, so `Modifier.enterContinuesList` in `MarkdownFields.kt` catches `Key.Enter` (no modifiers, caret on a
+line that `lineMarkerKindAt` calls a list item) and fires `FormatAction.ContinueList(caret)`; it consumes the event, so
+the field never inserts a newline of its own. Anything else — every soft keyboard, which commits `"\n"` as text — is
+caught *after* the fact by `EditorViewModel.continuedList`: `insertedNewlineOffset` diffs the text the field just
+produced against the previously published text and finds the single newline the edit inserted. That diff is deliberately
+not "the caret sits right after a `\n`" and not an exact one-character diff: an IME is free to commit extra characters
+alongside the Return — a trailing space, autocorrect, a character typed in the same frame — and both of those shorter
+tests silently drop exactly those edits, which is why Enter looked unhandled on a phone keyboard. Neither path can be
+dropped by gating on the file kind: `continueLists` is only true for `FileKind.Markdown`, because `RawMarkdownField`
+also renders plain `.txt`, where swallowing Enter would leave the file uneditable.
+
+`FormatAction.ContinueList(caretOffset)` inserts the line break itself (`enterEdit`), so it is the key path;
+`continueListAfterNewline(text, newlineOffset, selection)` is the same continuation for a newline that already exists,
+and is what the IME path calls. Both land in `continuationEdit`, which reads the line *above* the newline and re-emits
+its marker there, preserving indentation and the bullet character, bumping an ordered number, and always emitting an
+unchecked task. An empty item ends the list instead: the prefix is deleted, leaving the blank line the newline already
+made. "Empty" means the prefix is exactly canonical, which is what makes `- ` end the list while `-  ` (a second space)
+still continues it. It skips a line that already starts with the marker, so the key path publishing first and an IME
+echo arriving second cannot double it. Everything goes through `applyFormatTo`/`publishEdit`, so the synchronous parse
+keeps `value.text` and `document.text` equal and no marker is ever rendered raw.
 
 Known limit: a text field still cannot host real widgets, so inline images do not render in any mode. Closing that gap requires a block-based editor (one composable per block), which is a deliberate non-goal of the current design.
 

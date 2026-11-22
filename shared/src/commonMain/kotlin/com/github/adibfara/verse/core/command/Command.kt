@@ -1,6 +1,7 @@
 package com.github.adibfara.verse.core.command
 
 import kotlin.jvm.JvmInline
+import kotlinx.serialization.Serializable
 
 @JvmInline
 value class CommandId(val value: String)
@@ -26,7 +27,7 @@ enum class ShortcutKey {
     A, B, C, D, E, F, G, H, I, J, K, L, M,
     N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
     Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9,
-    Comma, Period, Slash, Backslash,
+    Comma, Period, Slash, Backslash, Equals, Minus, Plus,
     Tab, Escape, Enter, Delete, Backspace, Space,
     F2, F3,
     ArrowUp, ArrowDown, ArrowLeft, ArrowRight;
@@ -46,6 +47,9 @@ enum class ShortcutKey {
             Period -> "."
             Slash -> "/"
             Backslash -> "\\"
+            Equals -> "="
+            Minus -> "-"
+            Plus -> "+"
             ArrowUp -> "Up"
             ArrowDown -> "Down"
             ArrowLeft -> "Left"
@@ -54,6 +58,7 @@ enum class ShortcutKey {
         }
 }
 
+@Serializable
 data class KeyBinding(
     val key: ShortcutKey,
     val control: Boolean = false,
@@ -74,7 +79,10 @@ data class Command(
     val title: String,
     val category: CommandCategory,
     val binding: KeyBinding? = null,
-)
+    val aliasBindings: List<KeyBinding> = emptyList(),
+) {
+    val allBindings: List<KeyBinding> get() = listOfNotNull(binding) + aliasBindings
+}
 
 object Commands {
 
@@ -174,6 +182,28 @@ object Commands {
         category = CommandCategory.View,
     )
 
+    val IncreaseFontSize = Command(
+        id = CommandId("view.increaseFontSize"),
+        title = "Increase editor font size",
+        category = CommandCategory.View,
+        binding = KeyBinding(ShortcutKey.Equals, control = true),
+        aliasBindings = listOf(
+            KeyBinding(ShortcutKey.Equals, control = true, shift = true),
+            KeyBinding(ShortcutKey.Plus, control = true),
+            KeyBinding(ShortcutKey.Plus, control = true, shift = true),
+        ),
+    )
+
+    val DecreaseFontSize = Command(
+        id = CommandId("view.decreaseFontSize"),
+        title = "Decrease editor font size",
+        category = CommandCategory.View,
+        binding = KeyBinding(ShortcutKey.Minus, control = true),
+        aliasBindings = listOf(
+            KeyBinding(ShortcutKey.Minus, control = true, shift = true),
+        ),
+    )
+
     val OpenSettings = Command(
         id = CommandId("workspace.openSettings"),
         title = "Open settings",
@@ -228,6 +258,8 @@ object Commands {
         ToggleSidebar,
         ToggleTheme,
         ToggleFormattingToolbar,
+        IncreaseFontSize,
+        DecreaseFontSize,
         OpenSettings,
         CloseSpace,
     ) + jumpToTab

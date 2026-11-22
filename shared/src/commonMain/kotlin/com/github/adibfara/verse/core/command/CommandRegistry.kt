@@ -1,19 +1,25 @@
 package com.github.adibfara.verse.core.command
 
 class CommandRegistry(
-    commands: List<Command> = Commands.all,
-    overrides: Map<CommandId, KeyBinding> = emptyMap(),
+    private val baseCommands: List<Command> = Commands.all,
+    overrides: Map<CommandId, KeyBinding?> = emptyMap(),
 ) {
 
-    val commands: List<Command> = commands.map { command ->
-        overrides[command.id]?.let { command.copy(binding = it) } ?: command
+    private var currentOverrides: Map<CommandId, KeyBinding?> = overrides
+    private var resolvedCommands: List<Command> = applyOverrides(baseCommands, overrides)
+    private var byId: Map<CommandId, Command> = resolvedCommands.associateBy { it.id }
+    private var byBinding: Map<KeyBinding, CommandId> = indexBindings(resolvedCommands)
+
+    val commands: List<Command> get() = resolvedCommands
+
+    val overrides: Map<CommandId, KeyBinding?> get() = currentOverrides
+
+    fun setOverrides(overrides: Map<CommandId, KeyBinding?>) {
+        currentOverrides = overrides
+        resolvedCommands = applyOverrides(baseCommands, overrides)
+        byId = resolvedCommands.associateBy { it.id }
+        byBinding = indexBindings(resolvedCommands)
     }
-
-    private val byId: Map<CommandId, Command> = this.commands.associateBy { it.id }
-
-    private val byBinding: Map<KeyBinding, CommandId> = this.commands
-        .mapNotNull { command -> command.binding?.let { it to command.id } }
-        .toMap()
 
     fun commandFor(id: CommandId): Command? = byId[id]
 
@@ -42,12 +48,35 @@ class CommandRegistry(
         .toList()
 
     fun conflictingBindings(): List<KeyBinding> = commands
-        .mapNotNull { it.binding }
+        .flatMap { it.allBindings }
         .groupingBy { it }
         .eachCount()
         .filterValues { it > 1 }
         .keys
         .toList()
+
+    private fun applyOverrides(
+        commands: List<Command>,
+        overrides: Map<CommandId, KeyBinding?>,
+    ): List<Command> {
+        val claimed = overrides.values.filterNotNull().toSet()
+        return commands.map { command ->
+            if (overrides.containsKey(command.id)) {
+                command.copy(binding = overrides[command.id], aliasBindings = emptyList())
+            } else {
+                val binding = command.binding?.takeIf { it !in claimed }
+                val aliases = command.aliasBindings.filterNot { it in claimed }
+                when {
+                    binding == command.binding && aliases == command.aliasBindings -> command
+                    else -> command.copy(binding = binding, aliasBindings = aliases)
+                }
+            }
+        }
+    }
+
+    private fun indexBindings(commands: List<Command>): Map<KeyBinding, CommandId> = commands
+        .flatMap { command -> command.allBindings.map { binding -> binding to command.id } }
+        .toMap()
 }
 
 fun fuzzyScore(candidate: String, query: String): Int? {

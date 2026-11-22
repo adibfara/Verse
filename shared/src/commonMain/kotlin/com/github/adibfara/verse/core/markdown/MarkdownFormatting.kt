@@ -25,7 +25,7 @@ sealed interface FormatAction {
 
     data class ToggleLink(val range: MdRange) : FormatAction
 
-    data object ContinueList : FormatAction
+    data class ContinueList(val caretOffset: Int) : FormatAction
 }
 
 fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): TextEdit {
@@ -35,22 +35,42 @@ fun applyFormatAction(text: String, selection: MdRange, action: FormatAction): T
     if (action is FormatAction.ToggleLink) {
         return linkEdit(text, action.range)
     }
+    if (action is FormatAction.ContinueList) {
+        if (selection.start != selection.end) return TextEdit(text, selection)
+        return enterEdit(text, action.caretOffset, selection)
+    }
     val splices = when (action) {
         is FormatAction.ToggleInline -> inlineSplices(text, action.range, action.format)
         is FormatAction.SetHeading -> headingSplices(text, action.offset, action.level)
         is FormatAction.SetLineMarker -> lineMarkerSplices(text, action.offset, action.kind)
-        is FormatAction.ToggleLink -> emptyList()
-        FormatAction.ContinueList -> if (selection.start == selection.end) {
-            continuationSplices(text, selection.start)
-        } else {
-            emptyList()
-        }
+        is FormatAction.ToggleLink,
+        is FormatAction.ContinueList,
+            -> emptyList()
     }
     return applySplices(text, splices, selection)
 }
 
-fun hasListContinuation(text: String, caretOffset: Int): Boolean =
-    continuationSplices(text, caretOffset).isNotEmpty()
+fun continueListAfterNewline(text: String, newlineOffset: Int, selection: MdRange): TextEdit =
+    continuationEdit(text, newlineOffset, selection)
+
+fun insertedNewlineOffset(before: String, after: String): Int? {
+    if (before.isEmpty() && after.isEmpty()) return null
+    val limit = minOf(before.length, after.length)
+    var prefix = 0
+    while (prefix < limit && before[prefix] == after[prefix]) prefix++
+    var suffix = 0
+    while (suffix < limit - prefix &&
+        before[before.length - 1 - suffix] == after[after.length - 1 - suffix]
+    ) {
+        suffix++
+    }
+    val inserted = after.substring(prefix, after.length - suffix)
+    if (inserted.isEmpty()) return null
+    val newline = inserted.indexOf('\n')
+    if (newline < 0) return null
+    if (inserted.indexOf('\n', startIndex = newline + 1) >= 0) return null
+    return prefix + newline
+}
 
 fun inlineLinkAt(text: String, offset: Int): MdRange? {
     val caret = offset.coerceIn(0, text.length)
@@ -231,44 +251,61 @@ private fun lineMarkerSplice(
 
 private fun isOrderedMarker(marker: String): Boolean = marker.isNotEmpty() && marker.first().isDigit()
 
-fun lineMarkerKindAt(text: String, offset: Int): LineMarkerKind {
-    val scan = scanLinePrefix(text, lineRangeAt(text, offset))
-    return when {
-        scan.checkBox != null -> LineMarkerKind.Task
-        isOrderedMarker(scan.marker) -> LineMarkerKind.Ordered
-        scan.marker.isNotEmpty() -> LineMarkerKind.Bullet
-        else -> LineMarkerKind.None
-    }
+fun lineMarkerKindAt(text: String, offset: Int): LineMarkerKind =
+    kindOf(scanLinePrefix(text, lineRangeAt(text, offset)))
+
+private fun kindOf(scan: LinePrefixScan): LineMarkerKind = when {
+    scan.checkBox != null -> LineMarkerKind.Task
+    isOrderedMarker(scan.marker) -> LineMarkerKind.Ordered
+    scan.marker.isNotEmpty() -> LineMarkerKind.Bullet
+    else -> LineMarkerKind.None
 }
 
-private fun continuationSplices(text: String, caretOffset: Int): List<Splice> {
-    val line = lineRangeAt(text, caretOffset)
-    val scan = scanLinePrefix(text, line)
-    val kind = when {
-        scan.checkBox != null -> LineMarkerKind.Task
-        isOrderedMarker(scan.marker) -> LineMarkerKind.Ordered
-        scan.marker.isNotEmpty() -> LineMarkerKind.Bullet
-        else -> LineMarkerKind.None
-    }
-    if (kind == LineMarkerKind.None) return emptyList()
+private fun enterEdit(text: String, caretOffset: Int, selection: MdRange): TextEdit {
+    val caret = caretOffset.coerceIn(0, text.length)
+    val withNewline = text.substring(0, caret) + "\n" + text.substring(caret)
+    val afterCaret = MdRange(caret + 1, caret + 1)
+    if (lineMarkerKindAt(text, caret) == LineMarkerKind.None) return TextEdit(withNewline, afterCaret)
+    val continued = continuationEdit(withNewline, caret, afterCaret)
+    return if (continued.text == withNewline) TextEdit(withNewline, afterCaret) else continued
+}
 
-    val isEmptyItem = text.substring(scan.contentStart, line.end).isBlank()
+private fun continuationEdit(text: String, newlineOffset: Int, selection: MdRange): TextEdit {
+    val newline = newlineOffset.coerceIn(0, text.length)
+    if (newline >= text.length || text[newline] != '\n') return TextEdit(text, selection)
+    val previousLine = lineRangeAt(text, if (newline == 0) 0 else newline - 1)
+    val scan = scanLinePrefix(text, previousLine)
+    val kind = kindOf(scan)
+    if (kind == LineMarkerKind.None) return TextEdit(text, selection)
+
+    val isEmptyItem = text.substring(scan.contentStart, previousLine.end).isBlank() &&
+            scan.prefix == scan.canonicalPrefix
     if (isEmptyItem) {
-        return listOf(Splice(scan.indentEnd, line.end, "\n"))
+        return applySplices(
+            text = text,
+            splices = listOf(Splice(previousLine.start, previousLine.end, "")),
+            selection = selection,
+        )
+    }
+    val marker = text.substring(previousLine.start, scan.indentEnd) + nextMarker(scan, kind)
+    if (text.startsWith(marker, newline + 1)) return TextEdit(text, selection)
+    return applySplices(
+        text = text,
+        splices = listOf(Splice(newline + 1, newline + 1, marker)),
+        selection = selection,
+    )
+}
+
+private fun nextMarker(scan: LinePrefixScan, kind: LineMarkerKind): String = when (kind) {
+    LineMarkerKind.Bullet -> "${scan.marker.ifEmpty { "-" }} "
+    LineMarkerKind.Task -> "${scan.marker.ifEmpty { "-" }} [ ] "
+    LineMarkerKind.Ordered -> {
+        val number = (scan.marker.takeWhile { it.isDigit() }.toIntOrNull() ?: 1) + 1
+        val separator = scan.marker.lastOrNull { !it.isDigit() } ?: '.'
+        "$number$separator "
     }
 
-    val indentText = text.substring(line.start, scan.indentEnd)
-    val newMarker = when (kind) {
-        LineMarkerKind.Bullet -> "${scan.marker.ifEmpty { "-" }} "
-        LineMarkerKind.Task -> "${scan.marker.ifEmpty { "-" }} [ ] "
-        LineMarkerKind.Ordered -> {
-            val number = (scan.marker.takeWhile { it.isDigit() }.toIntOrNull() ?: 1) + 1
-            val separator = scan.marker.lastOrNull { !it.isDigit() } ?: '.'
-            "$number$separator "
-        }
-        LineMarkerKind.None -> ""
-    }
-    return listOf(Splice(caretOffset, caretOffset, "\n" + indentText + newMarker))
+    LineMarkerKind.None -> ""
 }
 
 fun lineContentRange(text: String, offset: Int): MdRange {
@@ -346,6 +383,8 @@ private class LinePrefixScan(
     val contentStart: Int,
     val marker: String,
     val checkBox: Char?,
+    val prefix: String,
+    val canonicalPrefix: String,
 )
 
 private fun scanLinePrefix(text: String, line: MdRange): LinePrefixScan {
@@ -363,19 +402,31 @@ private fun scanLinePrefix(text: String, line: MdRange): LinePrefixScan {
             index = digits + 1
         }
     }
-    if (marker.isEmpty()) return LinePrefixScan(indentEnd, indentEnd, "", null)
+    if (marker.isEmpty()) {
+        return LinePrefixScan(indentEnd, indentEnd, "", null, "", "")
+    }
     while (index < line.end && text[index] == ' ') index++
 
     var checkBox: Char? = null
+    var rawCheckBox = ""
     if (index + 3 <= line.end && text[index] == '[' && text[index + 2] == ']') {
         val inner = text[index + 1]
         if (inner == ' ' || inner == 'x' || inner == 'X') {
             checkBox = if (inner == ' ') ' ' else 'x'
+            rawCheckBox = text.substring(index, index + 3)
             index += 3
             while (index < line.end && text[index] == ' ') index++
         }
     }
-    return LinePrefixScan(indentEnd, index, marker, checkBox)
+    val canonicalPrefix = if (rawCheckBox.isEmpty()) "$marker " else "$marker $rawCheckBox "
+    return LinePrefixScan(
+        indentEnd = indentEnd,
+        contentStart = index,
+        marker = marker,
+        checkBox = checkBox,
+        prefix = text.substring(indentEnd, index),
+        canonicalPrefix = canonicalPrefix,
+    )
 }
 
 private fun indentEndOf(text: String, line: MdRange): Int {

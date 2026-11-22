@@ -6,9 +6,12 @@ import com.github.adibfara.verse.core.markdown.LineMarkerKind
 import com.github.adibfara.verse.core.markdown.MarkdownParser
 import com.github.adibfara.verse.core.markdown.MdRange
 import com.github.adibfara.verse.core.markdown.SpecialSpanKind
+import com.github.adibfara.verse.core.markdown.TextEdit
 import com.github.adibfara.verse.core.markdown.applyFormatAction
+import com.github.adibfara.verse.core.markdown.continueListAfterNewline
 import com.github.adibfara.verse.core.markdown.headingLevelAt
 import com.github.adibfara.verse.core.markdown.inlineFormatsCovering
+import com.github.adibfara.verse.core.markdown.insertedNewlineOffset
 import com.github.adibfara.verse.core.markdown.lineMarkerKindAt
 import com.github.adibfara.verse.core.markdown.specialSpanAt
 import kotlin.test.Test
@@ -19,6 +22,13 @@ import kotlin.test.assertTrue
 class MarkdownFormattingTest {
 
     private val parser = MarkdownParser()
+
+    private fun enter(line: String): TextEdit =
+        applyFormatAction(
+            text = line,
+            selection = MdRange(line.length, line.length),
+            action = FormatAction.ContinueList(line.length),
+        )
 
     @Test
     fun wrappingASelectionAddsMarkersAndKeepsTheSelectionOnTheContent() {
@@ -263,48 +273,135 @@ class MarkdownFormattingTest {
 
     @Test
     fun enterContinuesABulletList() {
-        val edit = applyFormatAction("- first", MdRange(7, 7), FormatAction.ContinueList)
+        val edit = enter("- first")
         assertEquals("- first\n- ", edit.text)
         assertEquals(MdRange(10, 10), edit.selection)
     }
 
     @Test
     fun enterContinuesAnOrderedListWithTheNextNumber() {
-        val edit = applyFormatAction("1. first", MdRange(8, 8), FormatAction.ContinueList)
+        val edit = enter("1. first")
         assertEquals("1. first\n2. ", edit.text)
     }
 
     @Test
     fun enterContinuesATaskAsUnchecked() {
-        val edit = applyFormatAction("- [x] done", MdRange(10, 10), FormatAction.ContinueList)
+        val edit = enter("- [x] done")
         assertEquals("- [x] done\n- [ ] ", edit.text)
     }
 
     @Test
+    fun enterKeepsTheBulletCharacterAndTheIndentation() {
+        val edit = enter("  * one")
+        assertEquals("  * one\n  * ", edit.text)
+        assertEquals(MdRange(12, 12), edit.selection)
+    }
+
+    @Test
+    fun enterInTheMiddleOfAListItemSplitsItIntoTwoItems() {
+        val edit = applyFormatAction("- item", MdRange(4, 4), FormatAction.ContinueList(4))
+        assertEquals("- it\n- em", edit.text)
+        assertEquals(MdRange(7, 7), edit.selection)
+    }
+
+    @Test
     fun enterOnAnEmptyListItemEndsTheListAndStartsANewLine() {
-        val edit = applyFormatAction("- first\n- ", MdRange(10, 10), FormatAction.ContinueList)
+        val edit = applyFormatAction("- first\n- ", MdRange(10, 10), FormatAction.ContinueList(10))
         assertEquals("- first\n\n", edit.text)
         assertEquals(MdRange(9, 9), edit.selection)
     }
 
     @Test
     fun enterOnAnEmptyTaskItemEndsTheListAndStartsANewLine() {
-        val edit = applyFormatAction("- [x] done\n- [ ] ", MdRange(17, 17), FormatAction.ContinueList)
+        val edit = applyFormatAction("- [x] done\n- [ ] ", MdRange(17, 17), FormatAction.ContinueList(17))
         assertEquals("- [x] done\n\n", edit.text)
         assertEquals(MdRange(12, 12), edit.selection)
     }
 
     @Test
     fun enterOnAnEmptyOrderedItemEndsTheListAndStartsANewLine() {
-        val edit = applyFormatAction("1. first\n2. ", MdRange(12, 12), FormatAction.ContinueList)
+        val edit = applyFormatAction("1. first\n2. ", MdRange(12, 12), FormatAction.ContinueList(12))
         assertEquals("1. first\n\n", edit.text)
         assertEquals(MdRange(10, 10), edit.selection)
     }
 
     @Test
-    fun enterDoesNothingOnAPlainLine() {
-        val edit = applyFormatAction("plain text", MdRange(10, 10), FormatAction.ContinueList)
-        assertEquals("plain text", edit.text)
+    fun aSecondSpaceMakesAnEmptyItemIntoContentSoTheListContinues() {
+        val edit = applyFormatAction("-  ", MdRange(3, 3), FormatAction.ContinueList(3))
+        assertEquals("-  \n- ", edit.text)
+        assertEquals(MdRange(6, 6), edit.selection)
+    }
+
+    @Test
+    fun aSecondSpaceAfterACheckboxKeepsTheListGoingToo() {
+        val edit = applyFormatAction("- [ ]  ", MdRange(7, 7), FormatAction.ContinueList(7))
+        assertEquals("- [ ]  \n- [ ] ", edit.text)
+        assertEquals(MdRange(14, 14), edit.selection)
+    }
+
+    @Test
+    fun enterOnAPlainLineJustAddsANewline() {
+        val edit = applyFormatAction("plain text", MdRange(10, 10), FormatAction.ContinueList(10))
+        assertEquals("plain text\n", edit.text)
+        assertEquals(MdRange(11, 11), edit.selection)
+    }
+
+    @Test
+    fun enterOnASelectionLeavesTheTextAlone() {
+        val edit = applyFormatAction("- first", MdRange(0, 7), FormatAction.ContinueList(7))
+        assertEquals("- first", edit.text)
+        assertEquals(MdRange(0, 7), edit.selection)
+    }
+
+    @Test
+    fun aNewlineTheFieldAlreadyInsertedIsContinuedInPlace() {
+        val edit = continueListAfterNewline("- first\n", newlineOffset = 7, selection = MdRange(8, 8))
+        assertEquals("- first\n- ", edit.text)
+        assertEquals(MdRange(10, 10), edit.selection)
+    }
+
+    @Test
+    fun theMarkerGoesRightAfterTheNewlineEvenWhenTheImeTypedMore() {
+        val edit = continueListAfterNewline("- milk \n", newlineOffset = 7, selection = MdRange(8, 8))
+        assertEquals("- milk \n- ", edit.text)
+        assertEquals(MdRange(10, 10), edit.selection)
+    }
+
+    @Test
+    fun anAlreadyContinuedLineIsNotContinuedTwice() {
+        val edit = continueListAfterNewline("- milk\n- ", newlineOffset = 6, selection = MdRange(8, 8))
+        assertEquals("- milk\n- ", edit.text)
+        assertEquals(MdRange(8, 8), edit.selection)
+    }
+
+    @Test
+    fun anOffsetThatIsNotANewlineChangesNothing() {
+        val edit = continueListAfterNewline("- first", newlineOffset = 3, selection = MdRange(7, 7))
+        assertEquals("- first", edit.text)
+        assertEquals(MdRange(7, 7), edit.selection)
+    }
+
+    @Test
+    fun aPlainLineAboveTheNewlineIsLeftAlone() {
+        val edit = continueListAfterNewline("plain text\n", newlineOffset = 10, selection = MdRange(11, 11))
+        assertEquals("plain text\n", edit.text)
+    }
+
+    @Test
+    fun theInsertedNewlineIsFoundWhateverTheImeCommittedWithIt() {
+        assertEquals(6, insertedNewlineOffset("- milk", "- milk\n"))
+        assertEquals(7, insertedNewlineOffset("- milk", "- milk \n"))
+        assertEquals(6, insertedNewlineOffset("- milk", "- milk\na"))
+        assertEquals(2, insertedNewlineOffset("a", "a\r\n"))
+        assertEquals(0, insertedNewlineOffset("milk", "\nmilk"))
+    }
+
+    @Test
+    fun anEditWithNoSingleNewlineIsNotANewline() {
+        assertNull(insertedNewlineOffset("- milk", "- milk"))
+        assertNull(insertedNewlineOffset("- milk", "- milk\n\n"))
+        assertNull(insertedNewlineOffset("- milk\n", "- milk"))
+        assertNull(insertedNewlineOffset("", ""))
     }
 
     @Test

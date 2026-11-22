@@ -58,14 +58,27 @@ fun VerseTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
     val colors = VerseTheme.colors
-    var selection by remember {
-        mutableStateOf(if (selectAllOnMount) TextRange(0, value.length) else TextRange(value.length))
+    var fieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = value,
+                selection = if (selectAllOnMount) TextRange(0, value.length) else TextRange(value.length),
+            ),
+        )
     }
+    var lastExternalValue by remember { mutableStateOf(value) }
+    if (lastExternalValue != value) {
+        lastExternalValue = value
+        if (value != fieldValue.text) {
+            fieldValue = TextFieldValue(text = value, selection = TextRange(value.length))
+        }
+    }
+    val placeholderVisible = fieldValue.text.isEmpty()
     BasicTextField(
-        value = TextFieldValue(text = value, selection = selection),
-        onValueChange = { fieldValue ->
-            selection = fieldValue.selection
-            onValueChange(fieldValue.text)
+        value = fieldValue,
+        onValueChange = { incomingValue ->
+            fieldValue = incomingValue
+            onValueChange(incomingValue.text)
         },
         modifier = modifier
             .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
@@ -85,7 +98,7 @@ fun VerseTextField(
         decorationBox = { innerTextField ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.weight(1f)) {
-                    if (value.isEmpty()) {
+                    if (placeholderVisible) {
                         VerseText(
                             text = placeholder,
                             style = VerseTheme.typography.uiBody,
@@ -99,6 +112,44 @@ fun VerseTextField(
             }
         },
     )
+}
+
+@Composable
+fun VerseStepper(
+    value: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    modifier: Modifier = Modifier,
+    decreaseEnabled: Boolean = true,
+    increaseEnabled: Boolean = true,
+    decreaseDescription: String = "Decrease",
+    increaseDescription: String = "Increase",
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VerseTheme.spacing.xs),
+    ) {
+        VerseIconButton(
+            icon = VerseIcons.Minus,
+            contentDescription = decreaseDescription,
+            onClick = onDecrease,
+            enabled = decreaseEnabled,
+        )
+        VerseText(
+            text = value,
+            modifier = Modifier.widthIn(min = VerseTheme.sizes.stepperValueWidth),
+            style = VerseTheme.typography.uiLabel,
+            color = VerseTheme.colors.textPrimary,
+            maxLines = 1,
+        )
+        VerseIconButton(
+            icon = VerseIcons.Plus,
+            contentDescription = increaseDescription,
+            onClick = onIncrease,
+            enabled = increaseEnabled,
+        )
+    }
 }
 
 @Composable

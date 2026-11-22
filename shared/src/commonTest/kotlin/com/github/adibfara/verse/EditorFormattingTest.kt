@@ -26,6 +26,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -235,9 +236,142 @@ class EditorFormattingTest {
     }
 
     @Test
+    fun aTypedNewlineOnAnEmptyTaskEndsTheListAndLeavesNoMarkerOnScreen() {
+        val state = afterTypingNewline("- [x] milk\n- [ ] ", 17)
+        assertEquals("- [x] milk\n\n", state.value.text)
+        assertEquals(12, state.value.selection.start)
+        val rendered = renderedTextOf(state)
+        assertFalse("-" in rendered)
+        assertFalse("[" in rendered)
+    }
+
+    @Test
+    fun aTypedNewlineAfterASecondSpaceContinuesTheList() {
+        val state = afterTypingNewline("-  ", 3)
+        assertEquals("-  \n- ", state.value.text)
+        assertEquals(6, state.value.selection.start)
+    }
+
+    @Test
+    fun aTypedNewlineInTheMiddleOfAnItemSplitsItIntoTwoItems() {
+        val state = afterTypingNewline("- milk and honey", 6)
+        assertEquals("- milk\n-  and honey", state.value.text)
+        assertEquals(9, state.value.selection.start)
+    }
+
+    @Test
+    fun aTypedNewlineOnAnIndentedItemKeepsTheIndent() {
+        val state = afterTypingNewline("  - milk", 8)
+        assertEquals("  - milk\n  - ", state.value.text)
+        assertEquals(13, state.value.selection.start)
+    }
+
+    @Test
+    fun anEnterKeyOnAListLineContinuesItWithoutShowingAMarker() {
+        val state = stateAfter("- milk", FormatAction.ContinueList(6), MdRange(6, 6))
+        assertEquals("- milk\n- ", state.value.text)
+        assertEquals(9, state.value.selection.start)
+        assertEquals(state.value.text, state.document.text)
+        assertFalse("-" in renderedTextOf(state))
+    }
+
+    @Test
+    fun anEnterKeyOnADocumentThatEndsInAListLineContinuesFromTheLastLine() {
+        val state = stateAfter("- one\n- two", FormatAction.ContinueList(11), MdRange(11, 11))
+        assertEquals("- one\n- two\n- ", state.value.text)
+        assertEquals(14, state.value.selection.start)
+    }
+
+    @Test
+    fun anEnterKeyOnAnEmptyTaskEndsTheListAndLeavesNoMarkerOnScreen() {
+        val state = stateAfter("- [ ] ", FormatAction.ContinueList(6), MdRange(6, 6))
+        assertEquals("\n", state.value.text)
+        assertEquals(1, state.value.selection.start)
+    }
+
+    @Test
+    fun aTypedNewlineContinuesEvenWhenTheImeCommitsASpaceWithIt() {
+        val viewModel = viewModelFor("- milk")
+        viewModel.onEvent(EditorEvent.TextChanged(TextFieldValue("- milk", TextRange(6))))
+        viewModel.onEvent(EditorEvent.TextChanged(TextFieldValue("- milk \n", TextRange(8))))
+        val state = viewModel.state.value
+        assertEquals("- milk \n- ", state.value.text)
+        assertEquals(10, state.value.selection.start)
+        assertEquals(state.value.text, state.document.text)
+    }
+
+    @Test
+    fun aTypedNewlineContinuesEvenWhenTheCaretEndsUpPastTheNewline() {
+        val viewModel = viewModelFor("- milk")
+        viewModel.onEvent(EditorEvent.TextChanged(TextFieldValue("- milk", TextRange(6))))
+        viewModel.onEvent(EditorEvent.TextChanged(TextFieldValue("- milk\na", TextRange(8))))
+        val state = viewModel.state.value
+        assertEquals("- milk\n- a", state.value.text)
+        assertEquals(10, state.value.selection.start)
+    }
+
+    @Test
     fun aTypedNewlineOutsideAListStaysAPlainNewline() {
         val state = afterTypingNewline("plain", 5)
         assertEquals("plain\n", state.value.text)
+    }
+
+    @Test
+    fun startingTheBodyPutsABlankLineAboveTheTitleLineAndLeavesTheCaretAtTheTop() {
+        val viewModel = viewModelFor("# Title\nbody")
+        viewModel.onEvent(EditorEvent.StartNoteBody)
+        val state = viewModel.state.value
+        assertEquals("\n# Title\nbody", state.value.text)
+        assertEquals(0, state.value.selection.start)
+        assertTrue(state.value.selection.collapsed)
+        assertEquals(state.value.text, state.document.text)
+    }
+
+    @Test
+    fun startingTheBodyOnAnEmptyNoteOnlyMovesTheCaret() {
+        val viewModel = viewModelFor("")
+        viewModel.onEvent(EditorEvent.StartNoteBody)
+        assertEquals("", viewModel.state.value.value.text)
+        assertEquals(0, viewModel.state.value.value.selection.start)
+    }
+
+    @Test
+    fun startingTheBodyTwiceDoesNotStackBlankLines() {
+        val viewModel = viewModelFor("# Title")
+        viewModel.onEvent(EditorEvent.StartNoteBody)
+        viewModel.onEvent(EditorEvent.StartNoteBody)
+        assertEquals("\n# Title", viewModel.state.value.value.text)
+        assertEquals(0, viewModel.state.value.value.selection.start)
+    }
+
+    @Test
+    fun startingTheBodyNeverRendersAMarkerCharacter() {
+        val viewModel = viewModelFor("# Title")
+        viewModel.onEvent(EditorEvent.StartNoteBody)
+        val rendered = renderedTextOf(viewModel.state.value)
+        listOf("#", "*", "[", "]").forEach { marker ->
+            assertFalse(marker in rendered, "\"$marker\" is visible in \"$rendered\"")
+        }
+        assertTrue(rendered.startsWith("\nTitle"), "\"$rendered\" should start with a blank line then the title")
+    }
+
+    @Test
+    fun leavingTheStartOfTheNoteDeletesAnEmptyFirstLineAndAsksForTheTitle() {
+        val viewModel = viewModelFor("\n# Title")
+        viewModel.onEvent(EditorEvent.JumpToTitle)
+        val state = viewModel.state.value
+        assertEquals("# Title", state.value.text)
+        assertEquals(state.value.text, state.document.text)
+        assertNotNull(state.focusTitleRequestId)
+    }
+
+    @Test
+    fun leavingTheStartOfTheNoteKeepsALineThatHasContent() {
+        val viewModel = viewModelFor("# Title")
+        viewModel.onEvent(EditorEvent.JumpToTitle)
+        val state = viewModel.state.value
+        assertEquals("# Title", state.value.text)
+        assertNotNull(state.focusTitleRequestId)
     }
 
     @Test

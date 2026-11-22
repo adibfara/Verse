@@ -97,9 +97,11 @@ fun RenderedMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    onBackspaceAtStart: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
+    continueLists: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     MaskedMarkdownField(
@@ -110,9 +112,11 @@ fun RenderedMarkdownField(
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
+        onBackspaceAtStart = onBackspaceAtStart,
         focusRequester = focusRequester,
         showFormatPopup = showFormatPopup,
         readOnly = readOnly,
+        continueLists = continueLists,
         modifier = modifier,
     )
 }
@@ -125,9 +129,11 @@ fun LiveMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    onBackspaceAtStart: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
+    continueLists: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val revealedLine = remember(value.text, value.selection.start) {
@@ -141,9 +147,11 @@ fun LiveMarkdownField(
         onToggleTask = onToggleTask,
         onOpenLink = onOpenLink,
         onFormat = onFormat,
+        onBackspaceAtStart = onBackspaceAtStart,
         focusRequester = focusRequester,
         showFormatPopup = showFormatPopup,
         readOnly = readOnly,
+        continueLists = continueLists,
         modifier = modifier,
     )
 }
@@ -158,9 +166,11 @@ private fun MaskedMarkdownField(
     onToggleTask: (MdRange, Boolean) -> Unit,
     onOpenLink: (String) -> Unit,
     onFormat: (FormatAction) -> Unit,
+    onBackspaceAtStart: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     showFormatPopup: Boolean = true,
     readOnly: Boolean = false,
+    continueLists: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val styles = rememberMarkdownStyles()
@@ -181,6 +191,7 @@ private fun MaskedMarkdownField(
     val currentValueChange = rememberUpdatedState(onValueChange)
     val currentToggleTask = rememberUpdatedState(onToggleTask)
     val currentOpenLink = rememberUpdatedState(onOpenLink)
+    val currentBackspaceAtStart = rememberUpdatedState(onBackspaceAtStart)
     val overTarget = remember { mutableStateOf(false) }
     val taps = remember(column, readOnly) {
         Modifier
@@ -231,6 +242,23 @@ private fun MaskedMarkdownField(
             onValueChange = { moved -> currentValueChange.value(moved) },
         )
     }
+    val topKeys = remember {
+        Modifier.backspaceAtStart(
+            valueOf = { currentValue.value },
+            handlerOf = { currentBackspaceAtStart.value },
+        )
+    }
+    val currentFormat = rememberUpdatedState(onFormat)
+    val listEnter = remember(continueLists) {
+        if (continueLists) {
+            Modifier.enterContinuesList(
+                valueOf = { currentValue.value },
+                onFormat = { action -> currentFormat.value(action) },
+            )
+        } else {
+            Modifier
+        }
+    }
     val editorBody = VerseTheme.typography.editorBody
     val textStyle = remember(colors, editorBody) {
         editorBody.copy(color = colors.textPrimary)
@@ -269,7 +297,9 @@ private fun MaskedMarkdownField(
                     overrideDescendants = overTarget.value,
                 )
                 .then(decorations)
-                .then(caretKeys),
+                .then(caretKeys)
+                .then(listEnter)
+                .then(topKeys),
             textStyle = textStyle,
             cursorBrush = cursorBrush,
             visualTransformation = transformation,
@@ -405,8 +435,11 @@ private fun markerGlyphRange(masked: MaskedDocument, line: MdRange): MdRange? {
 fun RawMarkdownField(
     value: TextFieldValue,
     onValueChange: (TextFieldValue) -> Unit,
+    onFormat: (FormatAction) -> Unit,
+    onBackspaceAtStart: (() -> Unit)? = null,
     focusRequester: FocusRequester? = null,
     readOnly: Boolean = false,
+    continueLists: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val colors = VerseTheme.colors
@@ -415,6 +448,25 @@ fun RawMarkdownField(
     val caretMargin = with(density) { VerseTheme.spacing.xl.toPx() }
     val keyboardInset = WindowInsets.ime.getBottom(density)
     val bringCaretIntoView = remember { BringIntoViewRequester() }
+    val currentValue = rememberUpdatedState(value)
+    val currentBackspaceAtStart = rememberUpdatedState(onBackspaceAtStart)
+    val currentFormat = rememberUpdatedState(onFormat)
+    val listEnter = remember(continueLists) {
+        if (continueLists) {
+            Modifier.enterContinuesList(
+                valueOf = { currentValue.value },
+                onFormat = { action -> currentFormat.value(action) },
+            )
+        } else {
+            Modifier
+        }
+    }
+    val topKeys = remember {
+        Modifier.backspaceAtStart(
+            valueOf = { currentValue.value },
+            handlerOf = { currentBackspaceAtStart.value },
+        )
+    }
     LaunchedEffect(value.selection.start, layout.value, keyboardInset) {
         val result = layout.value ?: return@LaunchedEffect
         bringCaretIntoView.bringIntoView(
@@ -426,7 +478,9 @@ fun RawMarkdownField(
         onValueChange = onValueChange,
         modifier = modifier
             .bringIntoViewRequester(bringCaretIntoView)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .then(listEnter)
+            .then(topKeys),
         textStyle = VerseTheme.typography.editorRaw.copy(color = colors.textPrimary),
         cursorBrush = SolidColor(colors.caret),
         onTextLayout = { layout.value = it },
@@ -906,6 +960,39 @@ private fun DrawScope.drawTaskBox(
             style = Stroke(width = stroke),
         )
     }
+}
+
+private fun Modifier.enterContinuesList(
+    valueOf: () -> TextFieldValue,
+    onFormat: (FormatAction) -> Unit,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    if (event.key != Key.Enter) return@onPreviewKeyEvent false
+    if (event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
+        return@onPreviewKeyEvent false
+    }
+    val value = valueOf()
+    if (!value.selection.collapsed) return@onPreviewKeyEvent false
+    val caret = value.selection.start.coerceIn(0, value.text.length)
+    if (lineMarkerKindAt(value.text, caret) == LineMarkerKind.None) return@onPreviewKeyEvent false
+    onFormat(FormatAction.ContinueList(caret))
+    true
+}
+
+private fun Modifier.backspaceAtStart(
+    valueOf: () -> TextFieldValue,
+    handlerOf: () -> (() -> Unit)?,
+): Modifier = onPreviewKeyEvent { event ->
+    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+    if (event.key != Key.Backspace) return@onPreviewKeyEvent false
+    if (event.isShiftPressed || event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) {
+        return@onPreviewKeyEvent false
+    }
+    val value = valueOf()
+    if (!value.selection.collapsed || value.selection.start != 0) return@onPreviewKeyEvent false
+    val handler = handlerOf() ?: return@onPreviewKeyEvent false
+    handler()
+    true
 }
 
 private fun Modifier.verticalCaretKeys(

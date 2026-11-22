@@ -55,7 +55,7 @@ fun resolveTheme(mode: ThemeMode): ThemeDefinition = when (mode) {
 @Composable
 fun VerseTheme(
     theme: ThemeDefinition,
-    editorFontSize: Float = 15.5f,
+    editorFontSize: Float = 16.5f,
     uiScale: Float = 1f,
     spacing: VerseSpacing = VerseSpacing(),
     sizes: VerseSizes = VerseSizes(),
